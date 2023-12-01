@@ -10,7 +10,14 @@ import { getStorage } from 'firebase/storage';
 function Vault(props) {
     // Props: AES key, encrypted manifest
     // Decrypt manifest and render filesystem
+    const secret = props.key;
+    const manifest = props.manifest;
 
+    return (
+        <>
+
+        </>
+    )
 
 }
 
