@@ -2,6 +2,7 @@ import './FindVault.css';
 
 // Security modules
 import { argon2id } from 'hash-wasm';
+import { argon2id } from 'hash-wasm';  // "Use Argon2id with minimums of 19 MiB of memory, an iteration count of 2, and 1 degree of parallelism." -OWASP
 import { sha3_256 } from 'js-sha3';
 
 // Firebase modules
