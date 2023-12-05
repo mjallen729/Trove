@@ -1,7 +1,7 @@
 import './Vault.css';
 
 // Security modules
-import { AES } from 'aes-js';
+const aesjs = require('aes-js');
 
 // Firebase modules
 import { storage } from './config/firebase';
