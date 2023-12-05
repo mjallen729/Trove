@@ -8,10 +8,11 @@ function App() {
             <div>
                 <Navbar/>
 
-                Decide which component to insert here:
-                FindVault
-                Vault
-                BuyVault
+                Overall navigation of the site logic goes here:
+                Pages:
+                    FindVault
+                    Vault
+                    CreateVault
 
 
             </div>
