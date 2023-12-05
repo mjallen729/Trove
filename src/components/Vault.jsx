@@ -1,17 +1,22 @@
 import './Vault.css';
 
 // Security modules
-import {} from 'aes-js';
+import { AES } from 'aes-js';
 
 // Firebase modules
 import { storage } from './config/firebase';
 import { getStorage } from 'firebase/storage';
 
+function render(json) {
+
+    
+}
+
 function Vault(props) {
     // Props: AES key, encrypted manifest
-    // Decrypt manifest and render filesystem
+    // Use the decrypted manifest to render filesystem
     const SECRET = props.key;
-    const manifest = props.manifest;
+    const manifest = props.manifest;  // decrypted already
 
     return (
         <>

@@ -11,6 +11,7 @@ function App() {
                 Decide which component to insert here:
                 FindVault
                 Vault
+                BuyVault
 
 
             </div>
