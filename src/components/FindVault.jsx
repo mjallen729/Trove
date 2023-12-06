@@ -2,14 +2,13 @@ import './FindVault.css';
 import { useState } from 'react';
 
 // Security modules
-import { argon2id } from 'hash-wasm';  // "Use Argon2id with minimums of 19 MiB of memory, an iteration count of 2, and 1 degree of parallelism." -OWASP
-import { sha3_256 } from 'js-sha3';
+import { sha3_256, sha3_512 } from 'js-sha3';
 import aes from 'aes-js';
 
 // Firebase modules
 import { firestore } from '../config/firebase';
 import { storage } from '../config/firebase';
-import { getDocFromServer, collection } from 'firebase/firestore';
+import { doc, getDoc } from "firebase/firestore";
 
 /*
 1) Client: take a 12 word BIP39 seedphrase
@@ -22,26 +21,28 @@ import { getDocFromServer, collection } from 'firebase/firestore';
 7) Client: use the contents of the manifest (a filesystem tree) to render user's vault to their screen.
 8) Client: when user opens a file fetch the encrypted file from server then decrypt it.
 */
-async function argon(key) {
-    const argon = await argon2id({
-        password: key,
-        salt: 'testsalt',
-        parallelism: 1,
-        iterations: 200,
-        memorySize: 5000,  // 5MB
-        hashLength: 32,
-        outputType: 'encoded',
 
-    });
+// Does all the async work to check if key exists.
+// Returns encrypted manifest or null
+async function checkExistsAsync(keyHash) {
+    const docRef = doc(firestore, 'seed-hashes', keyHash);
+    const docSnap = await getDoc(docRef);
 
-    return argon;
+    if (docSnap.exists()) {
+        // get data.vault-id
+        // find vault-id in storage
+        // return encrypted manifest
+
+    } else {
+        console.log('NO MANIFEST FOUND');
+        console.log(keyHash);
+        return null;
+
+    }
 
 }
 
 function FindVault() {
-    const seedHashesRef = collection(firestore, 'seed-hashes');
-    let key = null;
-
     const [seedWords, setSeedWords] = useState({
         1: '',
         2: '',
@@ -64,8 +65,8 @@ function FindVault() {
     }
 
     const checkVaultExists = (e) => {
-        // Hash password with argon2-256
-        // Pass to server to see if exists
+        // Hash seedphrase to make AES key
+        // Hash again then pass to server to see if exists
         // Return manifest if exists else null
         e.preventDefault();
 
@@ -75,17 +76,11 @@ function FindVault() {
 
         }
 
-        key = sha3_256(seedphraseBlob);
-        
-        let argonHash = null;
+        // Generate the key and it's hash
+        let key = sha3_256(seedphraseBlob);
+        let keyHash = sha3_256(sha3_512(key));
 
-        argon(key).then(_argonHash => {
-            argonHash = _argonHash;
-            console.log(_argonHash);
-
-            // do the rest of it in here!
-
-        });
+        checkExistsAsync(keyHash);
 
     }
 
