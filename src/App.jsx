@@ -1,18 +1,22 @@
 import './App.css';
-import { FindVault, Navbar, BuyVault } from './components';
+import Navbar from './components/Navbar';
+import FindVault from './components/FindVault';
+import Vault from './components/Vault';
+import CreateVault from './components/CreateVault';
 
 function App() {
 
     return (
         <>
+            <Navbar/>
             <div>
-                <Navbar/>
-
                 Overall navigation of the site logic goes here:
                 Pages:
                     FindVault
                     Vault
                     CreateVault
+
+                <FindVault/>
 
 
             </div>
