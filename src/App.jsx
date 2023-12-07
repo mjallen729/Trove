@@ -25,7 +25,7 @@ function App() {
                 <FindVault callback={ setVaultParams }/>
                 <br/><br/>
                 <h3>
-                    <span className='font-bold text-blue-700'>Key: </span>
+                    <span className='font-bold text-blue-700'>AES Key: </span>
                     {vaultParams.key}
                 </h3>
                 <h3>
