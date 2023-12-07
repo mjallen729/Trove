@@ -7,8 +7,9 @@ import aes from 'aes-js';
 
 // Firebase modules
 import { firestore } from '../config/firebase';
-import { storage } from '../config/firebase';
 import { doc, getDoc } from "firebase/firestore";
+import { storage } from '../config/firebase';
+import { ref } from 'firebase/storage';
 
 /*
 1) Client: take a 12 word BIP39 seedphrase
@@ -29,12 +30,13 @@ async function checkExistsAsync(keyHash) {
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
-        // get data.vault-id
-        // find vault-id in storage
-        // return encrypted manifest
+        // Find the manifest from the vault and return it
+        let data = await docSnap.data();
+        let vault = data['vault-id'];
+
+        return ref(storage, 'vaults/' + vault + '/manifest.json');
 
     } else {
-        console.log('NO MANIFEST FOUND');
         console.log(keyHash);
         return null;
 
@@ -42,7 +44,10 @@ async function checkExistsAsync(keyHash) {
 
 }
 
-function FindVault() {
+function FindVault(props) {
+    // Props: a callback function to pass manifest ref
+    const vaultCallback = props.callback;
+    
     const [seedWords, setSeedWords] = useState({
         1: '',
         2: '',
@@ -65,9 +70,8 @@ function FindVault() {
     }
 
     const checkVaultExists = (e) => {
-        // Hash seedphrase to make AES key
-        // Hash again then pass to server to see if exists
-        // Return manifest if exists else null
+        // Gen AES256 key from seedphrase then pass its hash to server
+        // Return manifest if hash exists else null
         e.preventDefault();
 
         let seedphraseBlob = '';
@@ -80,14 +84,28 @@ function FindVault() {
         let key = sha3_256(seedphraseBlob);
         let keyHash = sha3_256(sha3_512(key));
 
-        checkExistsAsync(keyHash);
+        checkExistsAsync('hash').then(exists => {  // CHANGED TO HASH TODO CHANGE BACK
+            if (exists == null) {
+                throw new Error('Vault not found');
+
+            } else {
+                // Pass key and manifestRef to callback function
+                vaultCallback(prevState => ({
+                    ...prevState,
+                    key: key + '',
+                    manifest: exists + '',
+                }));
+
+            }
+
+        });
 
     }
 
     return (
         <>
             <div>
-                <form onSubmit={checkVaultExists}>
+                <form onSubmit={ checkVaultExists }>
                     <input
                         type="text"
                         name="1"
@@ -163,8 +181,8 @@ function FindVault() {
 
                     <button type="submit">Submit</button>
                 </form>
-
             </div>
+
         </>
     );
 }

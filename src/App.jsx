@@ -4,7 +4,13 @@ import FindVault from './components/FindVault';
 import Vault from './components/Vault';
 import CreateVault from './components/CreateVault';
 
+import { useState } from 'react';
+
 function App() {
+    const [vaultParams, setVaultParams] = useState({
+        key: null,
+        manifest: null
+    });
 
     return (
         <>
@@ -16,7 +22,16 @@ function App() {
                     Vault
                     CreateVault
 
-                <FindVault/>
+                <FindVault callback={ setVaultParams }/>
+                <br/><br/>
+                <h3>
+                    <span className='font-bold text-blue-700'>Key: </span>
+                    {vaultParams.key}
+                </h3>
+                <h3>
+                    <span className='font-bold text-blue-700'>Manifest: </span>
+                    {vaultParams.manifest}
+                </h3>
 
 
             </div>
