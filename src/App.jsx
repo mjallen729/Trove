@@ -16,7 +16,7 @@ function App() {
         <>
             <Navbar/>
             <div>
-                Overall navigation of the site logic goes here:
+                Overall navigation of the site logic goes here.
                 Pages:
                     FindVault
                     Vault
