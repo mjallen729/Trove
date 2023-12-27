@@ -4,7 +4,7 @@ import './CreateVault.css';
 import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 
-function BuyVault() {
+function CreateVault() {
     // Generate a seedphrase and, upon the user's approval...
     // initialize the vault into the database
 
@@ -16,4 +16,4 @@ function BuyVault() {
 
 }
 
-export default BuyVault;
+export default CreateVault;
