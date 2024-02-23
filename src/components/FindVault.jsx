@@ -45,7 +45,7 @@ async function checkExistsAsync(keyHash) {
 }
 
 function FindVault(props) {
-    // Props: a callback function to pass manifest ref
+    // Props: a callback function to pass a snapshot of vault manifest to
     const vaultCallback = props.callback;
     
     const [seedWords, setSeedWords] = useState({
@@ -80,16 +80,16 @@ function FindVault(props) {
 
         }
 
-        // Generate the key and it's hash
+        // Generate the aes key and it's hash
         let key = sha3_256(seedphraseBlob);
         let keyHash = sha3_256(sha3_512(key));
 
-        checkExistsAsync('hash').then(exists => {  // CHANGED TO HASH TODO CHANGE BACK
+        checkExistsAsync('hash').then(exists => {  // Changed to 'hash'; TODO: change back to keyHash
             if (exists == null) {
                 throw new Error('Vault not found');
 
             } else {
-                // Pass key and manifestRef to callback function
+                // Pass the key and manifest to callback function
                 vaultCallback(prevState => ({
                     ...prevState,
                     key: key + '',
