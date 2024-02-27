@@ -80,6 +80,12 @@ function FindVault(props) {
 
         }
 
+        // Check if the form input
+        if (seedphraseBlob.length < 12) {
+            throw new Error('Vault not found');
+
+        }
+
         // Generate the aes key and it's hash
         let key = sha3_256(seedphraseBlob);
         let keyHash = sha3_256(sha3_512(key));
@@ -105,81 +111,88 @@ function FindVault(props) {
     return (
         <>
             <div>
-                <form onSubmit={ checkVaultExists }>
-                    <input
-                        type="text"
-                        name="1"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
-                    <input
-                        type="text"
-                        name="2"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
-                    <input
-                        type="text"
-                        name="3"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
-                    <input
-                        type="text"
-                        name="4"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
-                    <input
-                        type="text"
-                        name="5"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
-                    <input
-                        type="text"
-                        name="6"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
-                    <input
-                        type="text"
-                        name="7"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
-                    <input
-                        type="text"
-                        name="8"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
-                    <input
-                        type="text"
-                        name="9"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
-                    <input
-                        type="text"
-                        name="10"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
-                    <input
-                        type="text"
-                        name="11"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
-                    <input
-                        type="text"
-                        name="12"
-                        value={seedWords.name}
-                        onChange={handleChange}
-                    />
+                <form onSubmit={ checkVaultExists } id="seedForm">
+                    <div id="seedFormGrid">
+                        <input
+                            type="text"
+                            name="1"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
+                        <input
+                            type="text"
+                            name="2"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
+                        <input
+                            type="text"
+                            name="3"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
+                        <input
+                            type="text"
+                            name="4"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
+                        <input
+                            type="text"
+                            name="5"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
+                        <input
+                            type="text"
+                            name="6"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
+                        <input
+                            type="text"
+                            name="7"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
+                        <input
+                            type="text"
+                            name="8"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
+                        <input
+                            type="text"
+                            name="9"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
+                        <input
+                            type="text"
+                            name="10"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
+                        <input
+                            type="text"
+                            name="11"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
+                        <input
+                            type="text"
+                            name="12"
+                            value={seedWords.name}
+                            onChange={handleChange}
+                        />
 
-                    <button type="submit">Submit</button>
+                    </div>
+
+                    <div id="seedFormButtons">
+                        <button type="submit" id="seedFormSubmitButton">Submit</button>
+                        <button type="button" id="createVaultButton">Create</button>
+
+                    </div>
                 </form>
             </div>
 

@@ -15,13 +15,13 @@ function App() {
     return (
         <>
             <Navbar/>
-            <div>
-                Overall navigation of the site goes here.
-                Pages:
-                    FindVault
-                    Vault
-                    CreateVault
-
+            Overall navigation of the site goes here.
+            <br />FindVault
+            <br />Vault
+            <br />CreateVault
+            <br /><br />
+            
+            <div className="appBody">
                 <FindVault callback={ setVaultParams }/>
                 <br/><br/>
                 <h3>
