@@ -61,6 +61,7 @@ function FindVault(props) {
         10: '',
         11: '',
         12: '',
+
     });
 
     const handleChange = (e) => {
@@ -69,9 +70,9 @@ function FindVault(props) {
 
     }
 
+    // Gen AES256 key from seedphrase then pass its hash to server
+    // Return manifest if hash exists else null
     const checkVaultExists = (e) => {
-        // Gen AES256 key from seedphrase then pass its hash to server
-        // Return manifest if hash exists else null
         e.preventDefault();
 
         let seedphraseBlob = '';
@@ -80,9 +81,9 @@ function FindVault(props) {
 
         }
 
-        // Check if the form input
+        // Check if the form input is valid (WIP)
         if (seedphraseBlob.length < 12) {
-            throw new Error('Vault not found');
+            throw new Error('Invalid seed phrase');
 
         }
 
@@ -100,6 +101,7 @@ function FindVault(props) {
                     ...prevState,
                     key: key + '',
                     manifest: exists + '',
+
                 }));
 
             }
