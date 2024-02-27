@@ -9,7 +9,7 @@ import aes from 'aes-js';
 import { firestore } from '../config/firebase';
 import { doc, getDoc } from "firebase/firestore";
 import { storage } from '../config/firebase';
-import { ref } from 'firebase/storage';
+import { getDownloadURL, listAll, ref } from 'firebase/storage';
 
 /*
 1) Client: take a 12 word BIP39 seedphrase
@@ -24,17 +24,23 @@ import { ref } from 'firebase/storage';
 */
 
 // Does all the async work to check if key exists.
-// Returns encrypted manifest or null
+// Returns encrypted vault file or null
 async function checkExistsAsync(keyHash) {
     const docRef = doc(firestore, 'seed-hashes', keyHash);
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
-        // Find the manifest from the vault and return it
         let data = await docSnap.data();
         let vault = data['vault-id'];
 
-        return ref(storage, 'vaults/' + vault + '/manifest.json');
+        // for mvp just download the file (vault is single file)
+        let vault_ref = ref(storage, `vaults/${vault}`);
+        let vault_contents = await listAll(vault_ref);
+
+        let fileRef = vault_contents.items[0];
+        let downloadURL = getDownloadURL(fileRef);
+
+        // TODO download the file, return it
 
     } else {
         console.log(keyHash);

@@ -1,7 +1,6 @@
 import './App.css';
 import Navbar from './components/Navbar';
 import FindVault from './components/FindVault';
-import Vault from './components/Vault';
 import CreateVault from './components/CreateVault';
 
 import { useState } from 'react';
@@ -9,7 +8,8 @@ import { useState } from 'react';
 function App() {
     const [vaultParams, setVaultParams] = useState({
         key: null,
-        manifest: null
+        manifest: null,
+        
     });
 
     return (
@@ -20,7 +20,7 @@ function App() {
             <br />Vault
             <br />CreateVault
             <br /><br />
-            
+
             <div className="appBody">
                 <FindVault callback={ setVaultParams }/>
                 <br/><br/>
