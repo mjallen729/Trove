@@ -9,7 +9,7 @@ import aes from 'aes-js';
 import { firestore } from '../config/firebase';
 import { doc, getDoc } from "firebase/firestore";
 import { storage } from '../config/firebase';
-import { getDownloadURL, listAll, ref } from 'firebase/storage';
+import { getDownloadURL, list, ref } from 'firebase/storage';
 
 /*
 1) Client: take a 12 word BIP39 seedphrase
@@ -35,12 +35,13 @@ async function checkExistsAsync(keyHash) {
 
         // for mvp just download the file (vault is single file)
         let vault_ref = ref(storage, `vaults/${vault}`);
-        let vault_contents = await listAll(vault_ref);
-
+        let vault_contents = await list(vault_ref);
+        
         let fileRef = vault_contents.items[0];
         let downloadURL = getDownloadURL(fileRef);
 
         // TODO download the file, return it
+        return downloadURL;
 
     } else {
         console.log(keyHash);
