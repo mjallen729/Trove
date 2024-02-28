@@ -38,10 +38,9 @@ async function checkExistsAsync(keyHash) {
         let vault_contents = await list(vault_ref);
         
         let fileRef = vault_contents.items[0];
-        let downloadURL = getDownloadURL(fileRef);
+        let downloadLink = await getDownloadURL(fileRef);
 
-        // TODO download the file, return it
-        return downloadURL;
+        return fetch(downloadLink);
 
     } else {
         console.log(keyHash);
@@ -82,6 +81,14 @@ function FindVault(props) {
     const checkVaultExists = (e) => {
         e.preventDefault();
 
+        // Set to loading
+        vaultCallback(prevState => ({
+            ...prevState,
+            key: 'Loading...',
+            manifest: 'Loading...',
+
+        }));
+
         let seedphraseBlob = '';
         for (var i = 1; i <= 12; i++) {
             seedphraseBlob += seedWords[i + ''];
@@ -95,23 +102,35 @@ function FindVault(props) {
         }
 
         // Generate the aes key and it's hash
-        let key = sha3_256(seedphraseBlob);
-        let keyHash = sha3_256(sha3_512(key));
+        let aesKey = sha3_256(seedphraseBlob);
+        let aesKeyHash = sha3_256(sha3_512(aesKey));
 
-        checkExistsAsync('hash').then(exists => {  // Changed to 'hash'; TODO: change back to keyHash
-            if (exists == null) {
-                throw new Error('Vault not found');
-
-            } else {
-                // Pass the key and manifest to callback function
-                vaultCallback(prevState => ({
-                    ...prevState,
-                    key: key + '',
-                    manifest: exists + '',
-
-                }));
+        checkExistsAsync('hash').then(response => {  // Changed to 'hash'; TODO: change back to keyHash
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
 
             }
+            
+            response.blob().then(fileBlob => {
+                if (fileBlob.size == 0) {
+                    throw new Error('Vault not found');
+
+                } else {
+                    // Pass the key and file to callback function
+                    vaultCallback(prevState => ({
+                        ...prevState,
+                        key: aesKey + '',
+                        manifest: fileBlob + '',
+
+                    }));
+
+                }
+
+                console.log(fileBlob);
+                //TODO decrypt the file using aes key
+                //TODO download blob using filesaver.js?
+
+            })
 
         });
 
