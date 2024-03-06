@@ -1,5 +1,6 @@
 import './FindVault.css';
 import { useState } from 'react';
+import { saveAs } from "file-saver";
 
 // Security modules
 import { sha3_256, sha3_512 } from 'js-sha3';
@@ -9,7 +10,7 @@ import aes from 'aes-js';
 import { firestore } from '../config/firebase';
 import { doc, getDoc } from "firebase/firestore";
 import { storage } from '../config/firebase';
-import { getDownloadURL, list, ref } from 'firebase/storage';
+import { getBytes, list, ref } from 'firebase/storage';
 
 /*
 1) Client: take a 12 word BIP39 seedphrase
@@ -24,7 +25,7 @@ import { getDownloadURL, list, ref } from 'firebase/storage';
 */
 
 // Does all the async work to check if key exists.
-// Returns encrypted vault file or null
+// Returns encrypted file or null
 async function checkExistsAsync(keyHash) {
     const docRef = doc(firestore, 'seed-hashes', keyHash);
     const docSnap = await getDoc(docRef);
@@ -38,9 +39,22 @@ async function checkExistsAsync(keyHash) {
         let vault_contents = await list(vault_ref);
         
         let fileRef = vault_contents.items[0];
-        let downloadLink = await getDownloadURL(fileRef);
+        let rawArrayBuffer = await getBytes(fileRef);
 
-        return fetch(downloadLink);
+        return rawArrayBuffer
+
+        /*
+            const response = await fetch(API_URL_HERE);
+            const arrayBuffer = await response.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            const fileType = await FileType.fromBuffer(buffer);
+            if (fileType.ext) {
+                const outputFileName = `yourfilenamehere.${fileType.ext}`
+                fs.createWriteStream(outputFileName).write(buffer);
+            } else {
+                console.log('File type could not be reliably determined! The binary data may be malformed! No file saved!')
+            }
+        */
 
     } else {
         console.log(keyHash);
@@ -105,32 +119,27 @@ function FindVault(props) {
         let aesKey = sha3_256(seedphraseBlob);
         let aesKeyHash = sha3_256(sha3_512(aesKey));
 
-        checkExistsAsync('hash').then(response => {  // Changed to 'hash'; TODO: change back to keyHash
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+        checkExistsAsync('hash').then(bytes => {  // Changed to 'hash'; TODO: change back to keyHash
+            if (bytes.byteLength == 0) {
+                throw new Error(`Recieved no bytes! Vault does not exist.`);
 
             }
+
+            console.log(bytes)
+
+            vaultCallback(prevState => ({
+                ...prevState,
+                key: aesKey + '',
+                manifest: 'len ' + bytes.byteLength,
+
+            }));
+
+            // Decrypt the bytes using aes module
+
+            // Download the file
             
-            response.blob().then(fileBlob => {
-                if (fileBlob.size == 0) {
-                    throw new Error('Vault not found');
 
-                } else {
-                    // Pass the key and file to callback function
-                    vaultCallback(prevState => ({
-                        ...prevState,
-                        key: aesKey + '',
-                        manifest: fileBlob + '',
-
-                    }));
-
-                }
-
-                console.log(fileBlob);
-                //TODO decrypt the file using aes key
-                //TODO download blob using filesaver.js?
-
-            })
+            
 
         });
 
