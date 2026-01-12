@@ -57,7 +57,7 @@ Security Practices for Generating a Plaintext Vault Identifier (VaultUID)
 │  sodium.to_hex(hash)                                                │
 │                                                                     │
 │  Output: vaultUid (64 character hex string)                         │
-│  "a1b2c3d4e5f6...7890abcdef1234567890abcdef1234567890abcdef12345678"│
+│  "a1b2c3d4e5f6..."                                                  │
 └─────────────────────────────────────────────────────────────────────┘
 
 Summary:
