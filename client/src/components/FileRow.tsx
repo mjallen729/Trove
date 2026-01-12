@@ -5,6 +5,7 @@ interface FileRowProps {
   isSelected: boolean;
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
+  onToggle: () => void;
 }
 
 export function FileRow({
@@ -12,6 +13,7 @@ export function FileRow({
   isSelected,
   onClick,
   onDoubleClick,
+  onToggle,
 }: FileRowProps) {
   const formatBytes = (bytes: number | undefined) => {
     if (!bytes) return "—";
@@ -54,7 +56,10 @@ export function FileRow({
           type="checkbox"
           checked={isSelected}
           onChange={() => {}}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
           className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-cyan-500
                      focus:ring-cyan-500 focus:ring-offset-gray-900"
         />

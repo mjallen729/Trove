@@ -6,12 +6,18 @@
 - [.] Disable public mode on storage bucket (in both url const and edge function)
 - [ ] Review gemini audit in ./audits/ and apply fixes
 - [ ] Migrate downloads to signed URLs (safest)
+- [ ] Make sure ALL logging uses custom logger
+- [ ] Put all files in the root dir for storage instead of putting into vault folders (less intel about approx vault size)
+  - Instead, the manifest should reference the files via uid in the db
 
 ## Bugs
 
-- [ ] Multiple GoTrueClient warning on the console
+- [.] Multiple GoTrueClient warning on the console
 - [ ] Individual checkboxes on files do not work at all (but check all works fine)
 - [ ] Double clicking a file downloads it (bad)
+- [ ] Rename vault schema to vault manifest (its actual name)
+- [ ] Uploaded two files of the same name, one overwrote the other.
+- [ ] Storage used not updating!
 
 ## Features & Improvements
 
@@ -28,7 +34,8 @@
 - [.] vault login
 - [.] small file upload (<5mb)
 - [.] small file download (<5mb)
-- [ ] small file delete
+- [.] small file delete
 - [ ] large file upload (chunked)
 - [ ] large file download (chunked)
 - [ ] large file delete
+- [ ] folders and organization

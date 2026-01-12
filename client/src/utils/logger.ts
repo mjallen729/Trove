@@ -27,5 +27,6 @@ export const vaultLogger = new Logger("Vault");
 export const cryptoLogger = new Logger("Crypto");
 export const uploadLogger = new Logger("Upload");
 export const downloadLogger = new Logger("Download");
+export const deleteLogger = new Logger("Delete");
 
 export default Logger;
