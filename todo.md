@@ -13,11 +13,13 @@
 ## Bugs
 
 - [.] Multiple GoTrueClient warning on the console
-- [ ] Individual checkboxes on files do not work at all (but check all works fine)
+- [.] Individual checkboxes on files do not work at all (but check all works fine)
 - [ ] Double clicking a file downloads it (bad)
 - [ ] Rename vault schema to vault manifest (its actual name)
-- [ ] Uploaded two files of the same name, one overwrote the other.
-- [ ] Storage used not updating!
+- [.] Uploaded two files of the same name, one overwrote the other.
+- [.] Storage used not updating!
+- [ ] Ensure upload progress bar updates each time a chunk is uploaded
+- [ ] Uploads table in DB not working at all
 
 ## Features & Improvements
 
@@ -27,6 +29,7 @@
   - Remove created_at field from storage_transacts db, as it can be used for correlation attacks
   - How else can we maximize privacy?
 - [ ] Include JS Doc file headers in every file including module and description tags
+- [ ] Drag and drop for file/folder reorganization
 
 ## Quality Control
 
@@ -38,4 +41,4 @@
 - [ ] large file upload (chunked)
 - [ ] large file download (chunked)
 - [ ] large file delete
-- [ ] folders and organization
+- [.] folders and organization
