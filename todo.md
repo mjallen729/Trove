@@ -1,0 +1,34 @@
+## Security Vulnerabilities
+
+- [.] Remove console logging of any vault credentials when not in dev (testing)
+- [ ] Enable RLS for postgres
+- [.] Enable RLS for storage
+- [.] Disable public mode on storage bucket (in both url const and edge function)
+- [ ] Review gemini audit in ./audits/ and apply fixes
+- [ ] Migrate downloads to signed URLs (safest)
+
+## Bugs
+
+- [ ] Multiple GoTrueClient warning on the console
+- [ ] Individual checkboxes on files do not work at all (but check all works fine)
+- [ ] Double clicking a file downloads it (bad)
+
+## Features & Improvements
+
+- [.] Custom logger that logs console only if not in dev environment (meta.env.DEV), wrapper class. Migrate all logs
+- [ ] Feature: buy more storage via Stripe
+  - Mandatory: it's ok if the purchase itself isnt anonymous (Stripe & credit card) but under no circumstancecs can we allow the user to be traced to any transaction or vault
+  - Remove created_at field from storage_transacts db, as it can be used for correlation attacks
+  - How else can we maximize privacy?
+- [ ] Include JS Doc file headers in every file including module and description tags
+
+## Quality Control
+
+- [.] vault creation
+- [.] vault login
+- [.] small file upload (<5mb)
+- [.] small file download (<5mb)
+- [ ] small file delete
+- [ ] large file upload (chunked)
+- [ ] large file download (chunked)
+- [ ] large file delete

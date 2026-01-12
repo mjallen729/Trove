@@ -1,0 +1,23 @@
+{
+  "name": "trove-test",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npm run dev --prefix client",
+    "build": "npm run build --prefix client",
+    "preview": "npm run preview --prefix client",
+    "lint": "npm run lint --prefix client"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "GPL-3.0-only",
+  "dependencies": {
+    "@eslint/js": "^9.39.2",
+    "@supabase/supabase-js": "^2.90.1",
+    "eslint": "^9.33.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "prettier": "3.6.2"
+  }
+}

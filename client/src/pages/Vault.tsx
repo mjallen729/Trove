@@ -1,0 +1,369 @@
+import { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { useVault } from "../context/VaultContext";
+import { useToast } from "../context/ToastContext";
+import { useUpload } from "../hooks/useUpload";
+import { useDownload } from "../hooks/useDownload";
+import { useIdleTimeout } from "../hooks/useIdleTimeout";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
+import { Button } from "../components/ui/Button";
+import { FileList } from "../components/FileList";
+import { FolderBreadcrumbs } from "../components/FolderBreadcrumbs";
+import { ConfirmModal } from "../components/ConfirmModal";
+import { UploadQueue } from "../components/UploadQueue";
+import { UploadDropzone } from "../components/UploadDropzone";
+import { IdleTimeoutModal } from "../components/IdleTimeoutModal";
+import type { SchemaEntry } from "../types/types";
+import {
+  createFolder,
+  addEntry,
+  removeEntries,
+  getUniqueName,
+} from "../utils/schema";
+
+export function Vault() {
+  const navigate = useNavigate();
+  const {
+    logout,
+    schema,
+    updateSchema,
+    storageUsed,
+    storageLimit,
+    burnAt,
+    vaultUid,
+  } = useVault();
+  const { showToast } = useToast();
+  const { uploadQueue, addToQueue, cancelUpload, clearCompleted } = useUpload();
+  const { downloadFile } = useDownload();
+  const { showWarning, remainingSeconds, stayLoggedIn } = useIdleTimeout();
+  useNetworkStatus(); // Auto-logout on network drop
+
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<SchemaEntry[] | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Format bytes helper
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return "0 B";
+    const k = 1000;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  };
+
+  const storagePercent = (storageUsed / storageLimit) * 100;
+
+  // Handlers
+  const handleLogout = useCallback(async () => {
+    await logout();
+    showToast("Logged out successfully", "info");
+    navigate("/");
+  }, [logout, navigate, showToast]);
+
+  const handleNavigate = useCallback((folderId: string | null) => {
+    setCurrentFolderId(folderId);
+  }, []);
+
+  const handleCreateFolder = useCallback(async () => {
+    if (!newFolderName.trim()) {
+      setShowNewFolderInput(false);
+      return;
+    }
+
+    const uniqueName = getUniqueName(
+      schema,
+      newFolderName.trim(),
+      currentFolderId,
+      true
+    );
+    const folder = createFolder(uniqueName, currentFolderId);
+    const newSchema = addEntry(schema, folder);
+
+    try {
+      await updateSchema(newSchema);
+      showToast(`Created folder "${uniqueName}"`, "success");
+    } catch {
+      showToast("Failed to create folder", "error");
+    }
+
+    setNewFolderName("");
+    setShowNewFolderInput(false);
+  }, [newFolderName, schema, currentFolderId, updateSchema, showToast]);
+
+  const handleDownload = useCallback(
+    (file: SchemaEntry) => {
+      downloadFile(file);
+    },
+    [downloadFile]
+  );
+
+  const handleDelete = useCallback((entries: SchemaEntry[]) => {
+    setDeleteTarget(entries);
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+
+    setIsDeleting(true);
+    try {
+      const { schema: newSchema } = removeEntries(
+        schema,
+        deleteTarget.map((e) => e.id)
+      );
+
+      // TODO: Delete blobs from storage
+
+      await updateSchema(newSchema);
+
+      showToast(
+        `Deleted ${deleteTarget.length} item${deleteTarget.length !== 1 ? "s" : ""}`,
+        "success"
+      );
+    } catch {
+      showToast("Failed to delete items", "error");
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget, schema, updateSchema, showToast]);
+
+  const handleFilesDropped = useCallback(
+    (files: File[]) => {
+      addToQueue(files, currentFolderId);
+    },
+    [addToQueue, currentFolderId]
+  );
+
+  const handleFileInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length > 0) {
+        addToQueue(files, currentFolderId);
+      }
+      e.target.value = "";
+    },
+    [addToQueue, currentFolderId]
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-950 flex flex-col">
+      {/* Header */}
+      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-20">
+        <div className="px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {/* Logo */}
+            <div className="flex items-center gap-2">
+              <svg
+                className="w-8 h-8 text-cyan-500"
+                viewBox="0 0 24 24"
+                fill="currentColor">
+                <path d="M12 2C9.24 2 7 4.24 7 7v3H6c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2h-1V7c0-2.76-2.24-5-5-5zm0 2c1.66 0 3 1.34 3 3v3H9V7c0-1.66 1.34-3 3-3zm0 10c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" />
+              </svg>
+              <span className="text-xl font-bold text-white">Trove</span>
+            </div>
+
+            {/* Breadcrumbs */}
+            <FolderBreadcrumbs
+              schema={schema}
+              currentFolderId={currentFolderId}
+              onNavigate={handleNavigate}
+            />
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Storage indicator */}
+            <div className="hidden sm:flex items-center gap-3">
+              <div className="w-32 h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-cyan-500 transition-all"
+                  style={{ width: `${Math.min(storagePercent, 100)}%` }}
+                />
+              </div>
+              <span className="text-sm text-gray-400">
+                {formatBytes(storageUsed)} / {formatBytes(storageLimit)}
+              </span>
+            </div>
+
+            {/* Burn timer indicator */}
+            {burnAt && (
+              <div className="hidden sm:flex items-center gap-2 text-sm text-orange-400">
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span>Burns {new Date(burnAt).toLocaleDateString()}</span>
+              </div>
+            )}
+
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              Logout
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Toolbar */}
+      <div className="border-b border-gray-800 px-6 py-3 flex items-center gap-3">
+        {showNewFolderInput ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateFolder();
+                if (e.key === "Escape") {
+                  setShowNewFolderInput(false);
+                  setNewFolderName("");
+                }
+              }}
+              placeholder="Folder name"
+              autoFocus
+              className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm
+                         focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            />
+            <Button variant="primary" size="sm" onClick={handleCreateFolder}>
+              Create
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setShowNewFolderInput(false);
+                setNewFolderName("");
+              }}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowNewFolderInput(true)}>
+              <svg
+                className="w-4 h-4 mr-2"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+                />
+              </svg>
+              New folder
+            </Button>
+
+            <label className="cursor-pointer">
+              <span className="inline-flex items-center justify-center font-medium rounded-xl transition-all duration-200 bg-gray-700 text-white hover:bg-gray-600 px-3 py-1.5 text-sm">
+                <svg
+                  className="w-4 h-4 mr-2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                  />
+                </svg>
+                Upload files
+              </span>
+              <input
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileInputChange}
+              />
+            </label>
+
+            <label className="cursor-pointer">
+              <span className="inline-flex items-center justify-center font-medium rounded-xl transition-all duration-200 bg-gray-700 text-white hover:bg-gray-600 px-3 py-1.5 text-sm">
+                <svg
+                  className="w-4 h-4 mr-2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                  />
+                </svg>
+                Upload folder
+              </span>
+              <input
+                type="file"
+                multiple
+                // @ts-expect-error webkitdirectory is a non-standard attribute
+                webkitdirectory=""
+                className="hidden"
+                onChange={handleFileInputChange}
+              />
+            </label>
+          </>
+        )}
+      </div>
+
+      {/* File list with dropzone */}
+      <UploadDropzone onFilesDropped={handleFilesDropped}>
+        <main className="flex-1 px-6 py-4 min-h-[400px]">
+          <FileList
+            schema={schema}
+            currentFolderId={currentFolderId}
+            onNavigate={handleNavigate}
+            onDownload={handleDownload}
+            onDelete={handleDelete}
+          />
+        </main>
+      </UploadDropzone>
+
+      {/* Footer info */}
+      <footer className="border-t border-gray-800 px-6 py-3 text-center text-xs text-gray-600">
+        Vault ID: {vaultUid?.slice(0, 12)}
+      </footer>
+
+      {/* Upload queue */}
+      <UploadQueue
+        items={uploadQueue}
+        onCancel={cancelUpload}
+        onClearCompleted={clearCompleted}
+      />
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <ConfirmModal
+          title="Delete items"
+          message={`Are you sure you want to delete ${deleteTarget.length} item${deleteTarget.length !== 1 ? "s" : ""}? This action cannot be undone.`}
+          confirmLabel="Delete"
+          confirmVariant="danger"
+          isLoading={isDeleting}
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {/* Idle timeout warning modal */}
+      {showWarning && (
+        <IdleTimeoutModal
+          remainingSeconds={remainingSeconds}
+          onStayLoggedIn={stayLoggedIn}
+        />
+      )}
+    </div>
+  );
+}
