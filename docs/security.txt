@@ -1,0 +1,84 @@
+Security Practices for Generating a Plaintext Vault Identifier (VaultUID)
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  SEED PHRASE (plaintext)                                            │
+│  "abandon ability able about above absent absorb abstract..."       │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  UTF-8 ENCODE                                                       │
+│  sodium.from_string(seedPhrase)                                     │
+│                                                                     │
+│  Output: Uint8Array of seed phrase bytes                            │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  ARGON2ID (Password Hashing)                                        │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │  Input:                                                     │    │
+│  │    • password: seed phrase bytes                            │    │
+│  │    • salt: "trove-v1-salt-2024" (fixed, padded to 16 bytes) │    │
+│  │    • iterations: 2                                          │    │
+│  │    • memory: 16 MB                                          │    │
+│  │    • output length: 32 bytes                                │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                     │
+│  Output: masterSecret (32 bytes)                                    │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  BLAKE2B KDF (Key Derivation)                                       │
+│  sodium.crypto_kdf_derive_from_key()                                │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │  Input:                                                     │    │
+│  │    • master key: masterSecret                               │    │
+│  │    • subkey_id: 2  (1 = encryption key, 2 = vault ID)       │    │
+│  │    • context: "trove_id" (8 bytes)                          │    │
+│  │    • output length: 32 bytes                                │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                     │
+│  Output: derivedKey (32 bytes)                                      │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  BLAKE2B HASH (Additional Separation)                               │
+│  sodium.crypto_generichash(32, derivedKey)                          │
+│                                                                     │
+│  Output: hash (32 bytes)                                            │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  HEX ENCODE                                                         │
+│  sodium.to_hex(hash)                                                │
+│                                                                     │
+│  Output: vaultUid (64 character hex string)                         │
+│  "a1b2c3d4e5f6...7890abcdef1234567890abcdef1234567890abcdef12345678"│
+└─────────────────────────────────────────────────────────────────────┘
+
+Summary:
+┌──────┬──────────────┬──────────────────────────────────────────────┐
+│ Step │   Function   │                   Purpose                    │
+├──────┼──────────────┼──────────────────────────────────────────────┤
+│ 1    │ UTF-8 encode │ Convert string to bytes                      │
+├──────┼──────────────┼──────────────────────────────────────────────┤
+│ 2    │ Argon2id     │ Slow hash to resist brute-force (~100ms)     │
+├──────┼──────────────┼──────────────────────────────────────────────┤
+│ 3    │ Blake2b KDF  │ Derive separate key for vault ID (subkey 2)  │
+├──────┼──────────────┼──────────────────────────────────────────────┤
+│ 4    │ Blake2b Hash │ Extra separation from master secret          │
+├──────┼──────────────┼──────────────────────────────────────────────┤
+│ 5    │ Hex encode   │ Convert to 64-char string for DB primary key │
+└──────┴──────────────┴──────────────────────────────────────────────┘
+Parallel derivation for encryption key:
+
+masterSecret ──┬── KDF(subkey=1, ctx="trove_ek") ──► encryptionKey (stays client-side)
+               │
+               └── KDF(subkey=2, ctx="trove_id") ──► hash ──► vaultUid (sent to server)
+
+The encryption key and vault UID are derived from the same master secret but with different subkey IDs, so knowing one doesn't reveal the other.
+
