@@ -14,10 +14,10 @@
 
 - [.] Multiple GoTrueClient warning on the console
 - [.] Individual checkboxes on files do not work at all (but check all works fine)
-- [ ] Double clicking a file downloads it (bad)
-- [ ] Rename vault schema to vault manifest (its actual name)
 - [.] Uploaded two files of the same name, one overwrote the other.
 - [.] Storage used not updating!
+- [ ] Rename vault schema to vault manifest (its actual name), including in db cols ("manifest_cipher"), logs, code, etc.
+- [ ] Double clicking a file downloads it (bad)
 - [ ] Ensure upload progress bar updates each time a chunk is uploaded
 - [ ] Uploads table in DB not working at all
 
@@ -28,8 +28,14 @@
   - Mandatory: it's ok if the purchase itself isnt anonymous (Stripe & credit card) but under no circumstancecs can we allow the user to be traced to any transaction or vault
   - Remove created_at field from storage_transacts db, as it can be used for correlation attacks
   - How else can we maximize privacy?
+  - We need to also design the pricing model
 - [ ] Include JS Doc file headers in every file including module and description tags
 - [ ] Drag and drop for file/folder reorganization
+- [ ] Add option during create vault to reset burn timer every login
+- [ ] Display time in burn timer
+- [ ] Remove created_at from file schema entries
+- [ ] Change `modified` column in vault to `uploaded`
+- [ ] Burns info in the header (orange) should be displayed to the left of current storage
 
 ## Quality Control
 
