@@ -122,8 +122,10 @@ interface VaultContextValue extends VaultState {
     burnTimer: BurnTimerOption
   ) => Promise<boolean>;
   logout: () => Promise<void>;
-  updateSchema: (schema: VaultSchema) => Promise<void>;
-  updateStorageUsed: (delta: number) => void;
+  updateSchema: (
+    schemaOrUpdater: VaultSchema | ((current: VaultSchema) => VaultSchema)
+  ) => Promise<void>;
+  updateStorageUsed: (delta: number) => Promise<void>;
   clearError: () => void;
   getClient: () => SupabaseClient | null;
   getEncryptionKey: () => Uint8Array | null;
@@ -163,6 +165,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   // These are closure variables, providing slight memory protection
   const encryptionKeyRef = useRef<Uint8Array | null>(null);
   const vaultClientRef = useRef<SupabaseClient | null>(null);
+
+  // Schema ref for atomic updates (avoids race conditions)
+  const schemaRef = useRef<VaultSchema>(state.schema);
+  schemaRef.current = state.schema;
+  const schemaUpdateLockRef = useRef<Promise<void>>(Promise.resolve());
 
   const getEncryptionKey = useCallback(() => encryptionKeyRef.current, []);
   const getClient = useCallback(() => vaultClientRef.current, []);
@@ -335,6 +342,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           entries: schema.length,
           files: schema.filter((e) => e.type === "file").length,
           folders: schema.filter((e) => e.type === "folder").length,
+          schema,
         });
 
         // Sum all storage transactions to calculate current limit
@@ -406,51 +414,93 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
 
   const updateSchema = useCallback(
-    async (schema: VaultSchema): Promise<void> => {
-      const encryptionKey = encryptionKeyRef.current;
-      const client = vaultClientRef.current;
-
-      if (!encryptionKey || !client || !state.vaultUid) {
-        throw new Error("Vault not unlocked");
-      }
-
-      // Encrypt new schema
-      const schemaJson = JSON.stringify(schema);
-      const schemaBytes = new TextEncoder().encode(schemaJson);
-      const schemaCipher = await encrypt(schemaBytes, encryptionKey);
-
-      // Update on server
-      const { error } = await client
-        .from(TABLES.VAULTS)
-        .update({ schema_cipher: bytesToHex(schemaCipher) })
-        .eq("uid", state.vaultUid);
-
-      if (error) {
-        vaultLogger.error("Schema update failed:", {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-        });
-        throw error;
-      }
-
-      vaultLogger.log("Schema updated:", {
-        entries: schema.length,
-        files: schema.filter((e) => e.type === "file").length,
-        folders: schema.filter((e) => e.type === "folder").length,
+    async (
+      schemaOrUpdater: VaultSchema | ((current: VaultSchema) => VaultSchema)
+    ): Promise<void> => {
+      // Chain onto existing updates to serialize them
+      const previousUpdate = schemaUpdateLockRef.current;
+      let resolve: () => void;
+      schemaUpdateLockRef.current = new Promise<void>((r) => {
+        resolve = r;
       });
 
-      dispatch({ type: "UPDATE_SCHEMA", payload: schema });
+      try {
+        // Wait for any previous update to complete
+        await previousUpdate;
+
+        const encryptionKey = encryptionKeyRef.current;
+        const client = vaultClientRef.current;
+
+        if (!encryptionKey || !client || !state.vaultUid) {
+          throw new Error("Vault not unlocked");
+        }
+
+        // Get the schema to save - either directly or via updater function
+        const schema =
+          typeof schemaOrUpdater === "function"
+            ? schemaOrUpdater(schemaRef.current)
+            : schemaOrUpdater;
+
+        // Encrypt new schema
+        const schemaJson = JSON.stringify(schema);
+        const schemaBytes = new TextEncoder().encode(schemaJson);
+        const schemaCipher = await encrypt(schemaBytes, encryptionKey);
+
+        // Update on server
+        const { error } = await client
+          .from(TABLES.VAULTS)
+          .update({ schema_cipher: bytesToHex(schemaCipher) })
+          .eq("uid", state.vaultUid);
+
+        if (error) {
+          vaultLogger.error("Schema update failed:", {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+          });
+          throw error;
+        }
+
+        vaultLogger.log("Schema updated:", {
+          entries: schema.length,
+          files: schema.filter((e) => e.type === "file").length,
+          folders: schema.filter((e) => e.type === "folder").length,
+          schema,
+        });
+
+        // Update ref immediately so next queued update sees it
+        schemaRef.current = schema;
+        dispatch({ type: "UPDATE_SCHEMA", payload: schema });
+      } finally {
+        resolve!();
+      }
     },
     [state.vaultUid]
   );
 
   const updateStorageUsed = useCallback(
-    (delta: number) => {
-      dispatch({ type: "UPDATE_STORAGE", payload: state.storageUsed + delta });
+    async (delta: number) => {
+      const newStorageUsed = state.storageUsed + delta;
+      dispatch({ type: "UPDATE_STORAGE", payload: newStorageUsed });
+
+      // Persist to Supabase
+      const client = vaultClientRef.current;
+      if (client && state.vaultUid) {
+        const { error } = await client
+          .from(TABLES.VAULTS)
+          .update({ storage_used: newStorageUsed })
+          .eq("uid", state.vaultUid);
+
+        if (error) {
+          vaultLogger.error("Failed to update storage_used in database:", {
+            code: error.code,
+            message: error.message,
+          });
+        }
+      }
     },
-    [state.storageUsed]
+    [state.storageUsed, state.vaultUid]
   );
 
   const value: VaultContextValue = {

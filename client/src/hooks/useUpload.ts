@@ -26,10 +26,12 @@ interface UseUploadReturn {
 }
 
 export function useUpload(): UseUploadReturn {
-  const { getClient, getEncryptionKey, vaultUid, schema, updateSchema } =
+  const { getClient, getEncryptionKey, vaultUid, schema, updateSchema, updateStorageUsed } =
     useVault();
   const { showToast } = useToast();
   const [uploadQueue, setUploadQueue] = useState<UploadItem[]>([]);
+  const uploadQueueRef = useRef<UploadItem[]>([]);
+  uploadQueueRef.current = uploadQueue;
   const activeUploadsRef = useRef(0);
   const cancelledRef = useRef(new Set<string>());
   const processingRef = useRef(new Set<string>());
@@ -41,8 +43,11 @@ export function useUpload(): UseUploadReturn {
 
     if (!client || !encryptionKey || !vaultUid) return;
 
+    // Read from ref to get latest state (avoids stale closure)
+    const currentQueue = uploadQueueRef.current;
+
     // Find pending items that aren't already being processed
-    const pending = uploadQueue.filter(
+    const pending = currentQueue.filter(
       (item) => item.status === "pending" && !processingRef.current.has(item.id)
     );
     const canStart = MAX_CONCURRENT_UPLOADS - activeUploadsRef.current;
@@ -68,7 +73,7 @@ export function useUpload(): UseUploadReturn {
       activeUploadsRef.current++;
       uploadFile(item, client, encryptionKey);
     });
-  }, [getClient, getEncryptionKey, vaultUid, uploadQueue]);
+  }, [getClient, getEncryptionKey, vaultUid]);
 
   // Effect to process queue
   useEffect(() => {
@@ -208,24 +213,23 @@ export function useUpload(): UseUploadReturn {
 
       await Promise.all(uploadChunks);
 
-      // Get unique name if needed
-      const uniqueName = getUniqueName(schema, file.name, parentId, false);
-
-      // Add to schema
-      const fileEntry = createFileEntry(
-        uniqueName,
-        parentId,
-        file_uid,
-        file.size,
-        totalChunks,
-        file.type || "application/octet-stream"
-      );
-
-      const newSchema = addEntry(schema, fileEntry);
-      await updateSchema(newSchema);
+      // Add to schema atomically using updater function
+      let finalName = file.name;
+      await updateSchema((currentSchema) => {
+        finalName = getUniqueName(currentSchema, file.name, parentId, false);
+        const fileEntry = createFileEntry(
+          finalName,
+          parentId,
+          file_uid,
+          file.size,
+          totalChunks,
+          file.type || "application/octet-stream"
+        );
+        return addEntry(currentSchema, fileEntry);
+      });
 
       uploadLogger.log("File added to vault schema:", {
-        fileName: uniqueName,
+        fileName: finalName,
         fileUid: file_uid,
         fileSize: file.size,
       });
@@ -251,12 +255,15 @@ export function useUpload(): UseUploadReturn {
         )
       );
 
+      // Update storage used
+      updateStorageUsed(file.size);
+
       uploadLogger.log("Upload completed:", {
-        fileName: uniqueName,
+        fileName: finalName,
         fileUid: file_uid,
       });
 
-      showToast(`Uploaded "${uniqueName}"`, "success");
+      showToast(`Uploaded "${finalName}"`, "success");
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Upload failed";
 

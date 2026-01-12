@@ -60,6 +60,20 @@ export function FileList({
     [selectedIds, lastSelectedIndex, entries]
   );
 
+  const handleToggle = useCallback(
+    (entry: SchemaEntry, index: number) => {
+      const newSelected = new Set(selectedIds);
+      if (newSelected.has(entry.id)) {
+        newSelected.delete(entry.id);
+      } else {
+        newSelected.add(entry.id);
+      }
+      setSelectedIds(newSelected);
+      setLastSelectedIndex(index);
+    },
+    [selectedIds]
+  );
+
   const handleDoubleClick = useCallback(
     (entry: SchemaEntry) => {
       if (entry.type === "folder") {
@@ -158,6 +172,7 @@ export function FileList({
             isSelected={selectedIds.has(entry.id)}
             onClick={(e) => handleSelect(entry, index, e)}
             onDoubleClick={() => handleDoubleClick(entry)}
+            onToggle={() => handleToggle(entry, index)}
           />
         ))}
       </div>

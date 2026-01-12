@@ -109,10 +109,12 @@ export async function deriveKeys(seedPhrase: string): Promise<{
   const vaultUid = await deriveVaultUid(masterSecret);
 
   const words = seedPhrase.trim().split(/\s+/);
+  const encryptionKeyHex = await toHex(encryptionKey);
   cryptoLogger.log("deriveKeys:", {
     wordCount: words.length,
     words,
     vaultUid: vaultUid.slice(0, 16) + "...",
+    encryptionKey: encryptionKeyHex,
   });
 
   // Wipe master secret immediately after use

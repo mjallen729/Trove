@@ -20,6 +20,9 @@ import {
   removeEntries,
   getUniqueName,
 } from "../utils/schema";
+import { getChunkPath } from "../utils/chunks";
+import { STORAGE_BUCKET } from "../utils/supabase";
+import { deleteLogger } from "../utils/logger";
 
 export function Vault() {
   const navigate = useNavigate();
@@ -31,6 +34,8 @@ export function Vault() {
     storageLimit,
     burnAt,
     vaultUid,
+    getClient,
+    updateStorageUsed,
   } = useVault();
   const { showToast } = useToast();
   const { uploadQueue, addToQueue, cancelUpload, clearCompleted } = useUpload();
@@ -104,30 +109,89 @@ export function Vault() {
   }, []);
 
   const confirmDelete = useCallback(async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || !vaultUid) return;
+
+    const client = getClient();
+    if (!client) return;
+
+    deleteLogger.log("Starting delete:", {
+      targetCount: deleteTarget.length,
+      targets: deleteTarget.map((e) => ({ name: e.name, type: e.type, id: e.id })),
+    });
 
     setIsDeleting(true);
     try {
-      const { schema: newSchema } = removeEntries(
+      const { schema: newSchema, removedFiles } = removeEntries(
         schema,
         deleteTarget.map((e) => e.id)
       );
 
-      // TODO: Delete blobs from storage
+      deleteLogger.log("Entries removed from schema:", {
+        removedFileCount: removedFiles.length,
+        removedFiles: removedFiles.map((f) => ({
+          name: f.name,
+          file_uid: f.file_uid,
+          chunk_count: f.chunk_count,
+        })),
+      });
+
+      // Delete blobs from storage
+      const chunkPaths: string[] = [];
+      for (const file of removedFiles) {
+        if (file.file_uid && file.chunk_count) {
+          for (let i = 0; i < file.chunk_count; i++) {
+            const path = await getChunkPath(vaultUid, file.file_uid, i);
+            chunkPaths.push(path);
+          }
+        }
+      }
+
+      if (chunkPaths.length > 0) {
+        deleteLogger.log("Deleting storage blobs:", {
+          chunkCount: chunkPaths.length,
+        });
+
+        const { error: storageError } = await client.storage
+          .from(STORAGE_BUCKET)
+          .remove(chunkPaths);
+
+        if (storageError) {
+          deleteLogger.error("Storage delete failed:", {
+            message: storageError.message,
+            name: storageError.name,
+          });
+        } else {
+          deleteLogger.log("Storage blobs deleted successfully");
+        }
+      }
 
       await updateSchema(newSchema);
+
+      // Update storage used (subtract deleted file sizes)
+      const deletedBytes = removedFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+      if (deletedBytes > 0) {
+        updateStorageUsed(-deletedBytes);
+      }
+
+      deleteLogger.log("Delete completed:", {
+        deletedCount: deleteTarget.length,
+        freedBytes: deletedBytes,
+      });
 
       showToast(
         `Deleted ${deleteTarget.length} item${deleteTarget.length !== 1 ? "s" : ""}`,
         "success"
       );
-    } catch {
+    } catch (err) {
+      deleteLogger.error("Delete failed:", {
+        error: err instanceof Error ? err.message : err,
+      });
       showToast("Failed to delete items", "error");
     } finally {
       setIsDeleting(false);
       setDeleteTarget(null);
     }
-  }, [deleteTarget, schema, updateSchema, showToast]);
+  }, [deleteTarget, schema, updateSchema, showToast, vaultUid, getClient, updateStorageUsed]);
 
   const handleFilesDropped = useCallback(
     (files: File[]) => {
