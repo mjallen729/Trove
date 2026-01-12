@@ -19,7 +19,7 @@ Security Practices for Generating a Plaintext Vault Identifier (VaultUID)
 │  ┌─────────────────────────────────────────────────────────────┐    │
 │  │  Input:                                                     │    │
 │  │    • password: seed phrase bytes                            │    │
-│  │    • salt: "trove-v1-salt-2024" (fixed, padded to 16 bytes) │    │
+│  │    • salt: "trove-v1-salt-2026" (fixed, padded to 16 bytes) │    │
 │  │    • iterations: 2                                          │    │
 │  │    • memory: 16 MB                                          │    │
 │  │    • output length: 32 bytes                                │    │
