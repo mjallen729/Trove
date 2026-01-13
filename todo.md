@@ -4,12 +4,12 @@
 - [ ] Enable RLS for postgres
 - [.] Enable RLS for storage
 - [.] Disable public mode on storage bucket (in both url const and edge function)
-- [ ] Review gemini audit in ./audits/ and apply fixes
+- [.] Review first gemini audit in ./audits/ and apply fixes
 <!-- - [ ] Migrate downloads to signed URLs (safest) -->
 - [ ] Make sure ALL logging uses custom logger
-- [ ] Put all files in the root dir for storage instead of putting into vault folders (less intel about approx vault size)
-  - Instead, the manifest should reference the files via uid in the db
-- [ ] For deriving file chunks names in storage, instead of hash(fileUid:chunkIndex) it should be hash(fileUid_Manifest.id:chunkIndex). The Manifest.id is located inside of the encrypted manifest so only the client can access it, therefore no one can derive the file storage name from the file_uid except the client.
+<!-- - [ ] Put all files in the root dir for storage instead of putting into vault folders (less intel about approx vault size)
+  - Instead, the manifest should reference the files via uid in the db -->
+- [.] For deriving file chunks names in storage, instead of hash(fileUid:chunkIndex) it should be hash(fileUid_Manifest.id:chunkIndex). The Manifest.id is located inside of the encrypted manifest so only the client can access it, therefore no one can derive the file storage name from the file_uid except the client.
 
 ## Bugs
 
@@ -18,10 +18,10 @@
 - [.] Uploaded two files of the same name, one overwrote the other.
 - [.] Storage used not updating!
 - [.] Rename vault schema to vault manifest (its actual name), including in db cols ("manifest_cipher"), logs, code, etc.
-- [ ] Double clicking a file downloads it (bad)
-- [ ] Uploading a folder just unpacks it instead of uploading as a singular "folder" unit
+- [.] Double clicking a file downloads it (bad)
+- [.] Uploading a folder just unpacks it instead of uploading as a singular "folder" unit
   - If unpacking is unavoidable, unpack into one of our virtualized folders with the same name to mimic this behavior
-- [ ] Arrow is facing wrong direction each state in upload queue component
+- [.] Arrow is facing wrong direction each state in upload queue component
 - [ ] Uploads table in DB not working at all, investigate its functionality
 
 ## Features & Improvements
@@ -52,3 +52,5 @@
 - [.] large file upload (chunked)
 - [ ] large file download (chunked)
 - [.] large file delete
+- [ ] Final prettier
+- [ ] Final eslint

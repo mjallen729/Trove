@@ -1,7 +1,9 @@
-import type { ManifestEntry } from "../types/types";
+import type { ManifestEntry, VaultManifest } from "../types/types";
+import { getFolderSize } from "../utils/manifest";
 
 interface FileRowProps {
   entry: ManifestEntry;
+  manifest: VaultManifest;
   isSelected: boolean;
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
@@ -10,6 +12,7 @@ interface FileRowProps {
 
 export function FileRow({
   entry,
+  manifest,
   isSelected,
   onClick,
   onDoubleClick,
@@ -82,7 +85,9 @@ export function FileRow({
 
       {/* Size */}
       <div className="col-span-2 flex items-center text-gray-500 text-sm">
-        {entry.type === "file" ? formatBytes(entry.size) : "—"}
+        {entry.type === "file"
+          ? formatBytes(entry.size)
+          : formatBytes(getFolderSize(manifest, entry.id))}
       </div>
 
       {/* Date */}

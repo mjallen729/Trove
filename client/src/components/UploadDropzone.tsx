@@ -6,8 +6,13 @@ import {
   type ReactNode,
 } from "react";
 
+export interface FolderUploadInfo {
+  name: string;
+  relativePaths: Map<File, string>;
+}
+
 interface UploadDropzoneProps {
-  onFilesDropped: (files: File[]) => void;
+  onFilesDropped: (files: File[], folderInfo?: FolderUploadInfo) => void;
   children: ReactNode;
   disabled?: boolean;
 }
@@ -41,13 +46,10 @@ export function UploadDropzone({
     }
   }, []);
 
-  const handleDragOver = useCallback(
-    (e: DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-    },
-    []
-  );
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
 
   const handleDrop = useCallback(
     async (e: DragEvent<HTMLDivElement>) => {
@@ -60,6 +62,7 @@ export function UploadDropzone({
 
       const files: File[] = [];
       const items = e.dataTransfer.items;
+      let folderInfo: FolderUploadInfo | undefined;
 
       // Process dropped items
       for (let i = 0; i < items.length; i++) {
@@ -71,8 +74,39 @@ export function UploadDropzone({
         const entry = item.webkitGetAsEntry?.();
 
         if (entry) {
-          const entryFiles = await processEntry(entry);
-          files.push(...entryFiles);
+          // Check if single folder dropped - preserve structure
+          if (entry.isDirectory && items.length === 1) {
+            const relativePaths = new Map<File, string>();
+            const dirEntry = entry as FileSystemDirectoryEntry;
+            const reader = dirEntry.createReader();
+
+            // Read root folder's children directly (don't include root name in paths)
+            let childEntries: FileSystemEntry[] = [];
+            let batch: FileSystemEntry[];
+            do {
+              batch = await new Promise<FileSystemEntry[]>(
+                (resolve, reject) => {
+                  reader.readEntries(resolve, reject);
+                }
+              );
+              childEntries = childEntries.concat(batch);
+            } while (batch.length > 0);
+
+            // Process each child starting with empty path
+            for (const childEntry of childEntries) {
+              const childFiles = await processEntryWithPaths(
+                childEntry,
+                "",
+                relativePaths
+              );
+              files.push(...childFiles);
+            }
+
+            folderInfo = { name: entry.name, relativePaths };
+          } else {
+            const entryFiles = await processEntry(entry);
+            files.push(...entryFiles);
+          }
         } else {
           // Fallback to simple file
           const file = item.getAsFile();
@@ -81,7 +115,7 @@ export function UploadDropzone({
       }
 
       if (files.length > 0) {
-        onFilesDropped(files);
+        onFilesDropped(files, folderInfo);
       }
     },
     [disabled, onFilesDropped]
@@ -154,6 +188,56 @@ async function processEntry(entry: FileSystemEntry): Promise<File[]> {
     // Process each entry recursively
     for (const childEntry of entries) {
       const childFiles = await processEntry(childEntry);
+      files.push(...childFiles);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Recursively process a FileSystemEntry and track relative paths
+ */
+async function processEntryWithPaths(
+  entry: FileSystemEntry,
+  currentPath: string,
+  relativePaths: Map<File, string>
+): Promise<File[]> {
+  const files: File[] = [];
+
+  if (entry.isFile) {
+    const fileEntry = entry as FileSystemFileEntry;
+    const file = await new Promise<File>((resolve, reject) => {
+      fileEntry.file(resolve, reject);
+    });
+    const filePath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
+    relativePaths.set(file, filePath);
+    files.push(file);
+  } else if (entry.isDirectory) {
+    const dirEntry = entry as FileSystemDirectoryEntry;
+    const reader = dirEntry.createReader();
+
+    // Read all entries in directory
+    let entries: FileSystemEntry[] = [];
+    let batch: FileSystemEntry[];
+
+    do {
+      batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+        reader.readEntries(resolve, reject);
+      });
+      entries = entries.concat(batch);
+    } while (batch.length > 0);
+
+    // Build new path for children
+    const newPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
+
+    // Process each entry recursively
+    for (const childEntry of entries) {
+      const childFiles = await processEntryWithPaths(
+        childEntry,
+        newPath,
+        relativePaths
+      );
       files.push(...childFiles);
     }
   }

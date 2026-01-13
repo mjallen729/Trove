@@ -5,7 +5,10 @@ import { MAX_FILE_NAME_LENGTH } from "../types/types";
 /**
  * Create a new folder entry
  */
-export function createFolder(name: string, parent: string | null): ManifestEntry {
+export function createFolder(
+  name: string,
+  parent: string | null
+): ManifestEntry {
   return {
     id: generateFileUid(),
     name: truncateName(name),
@@ -59,8 +62,11 @@ function truncateName(name: string): string {
 /**
  * Add entry to manifest
  */
-export function addEntry(manifest: VaultManifest, entry: ManifestEntry): VaultManifest {
-  return [...manifest, entry];
+export function addEntry(
+  manifest: VaultManifest,
+  entry: ManifestEntry
+): VaultManifest {
+  return { ...manifest, entries: [...manifest.entries, entry] };
 }
 
 /**
@@ -70,7 +76,7 @@ export function addEntries(
   manifest: VaultManifest,
   entries: ManifestEntry[]
 ): VaultManifest {
-  return [...manifest, ...entries];
+  return { ...manifest, entries: [...manifest.entries, ...entries] };
 }
 
 /**
@@ -81,7 +87,7 @@ export function removeEntry(
   manifest: VaultManifest,
   entryId: string
 ): { manifest: VaultManifest; removedFiles: ManifestEntry[] } {
-  const entry = manifest.find((e) => e.id === entryId);
+  const entry = manifest.entries.find((e) => e.id === entryId);
   if (!entry) return { manifest, removedFiles: [] };
 
   // Collect all IDs to remove (entry + descendants if folder)
@@ -94,7 +100,7 @@ export function removeEntry(
 
   if (entry.type === "folder") {
     const collectDescendants = (parentId: string) => {
-      manifest.forEach((e) => {
+      manifest.entries.forEach((e) => {
         if (e.parent === parentId) {
           idsToRemove.add(e.id);
           if (e.type === "file") {
@@ -108,8 +114,8 @@ export function removeEntry(
     collectDescendants(entryId);
   }
 
-  const newManifest = manifest.filter((e) => !idsToRemove.has(e.id));
-  return { manifest: newManifest, removedFiles };
+  const newEntries = manifest.entries.filter((e) => !idsToRemove.has(e.id));
+  return { manifest: { ...manifest, entries: newEntries }, removedFiles };
 }
 
 /**
@@ -138,14 +144,14 @@ export function getFilesInEntry(
   manifest: VaultManifest,
   entryId: string
 ): ManifestEntry[] {
-  const entry = manifest.find((e) => e.id === entryId);
+  const entry = manifest.entries.find((e) => e.id === entryId);
   if (!entry) return [];
 
   if (entry.type === "file") return [entry];
 
   const files: ManifestEntry[] = [];
   const collectFiles = (parentId: string) => {
-    manifest.forEach((e) => {
+    manifest.entries.forEach((e) => {
       if (e.parent === parentId) {
         if (e.type === "file") {
           files.push(e);
@@ -167,9 +173,12 @@ export function renameEntry(
   entryId: string,
   newName: string
 ): VaultManifest {
-  return manifest.map((e) =>
-    e.id === entryId ? { ...e, name: truncateName(newName) } : e
-  );
+  return {
+    ...manifest,
+    entries: manifest.entries.map((e) =>
+      e.id === entryId ? { ...e, name: truncateName(newName) } : e
+    ),
+  };
 }
 
 /**
@@ -180,9 +189,12 @@ export function moveEntry(
   entryId: string,
   newParentId: string | null
 ): VaultManifest {
-  return manifest.map((e) =>
-    e.id === entryId ? { ...e, parent: newParentId } : e
-  );
+  return {
+    ...manifest,
+    entries: manifest.entries.map((e) =>
+      e.id === entryId ? { ...e, parent: newParentId } : e
+    ),
+  };
 }
 
 /**
@@ -194,7 +206,7 @@ export function nameExistsInFolder(
   parentId: string | null,
   excludeId?: string
 ): boolean {
-  return manifest.some(
+  return manifest.entries.some(
     (e) =>
       e.parent === parentId &&
       e.name.toLowerCase() === name.toLowerCase() &&
@@ -244,7 +256,7 @@ export function getEntriesInFolder(
   manifest: VaultManifest,
   folderId: string | null
 ): ManifestEntry[] {
-  return manifest
+  return manifest.entries
     .filter((entry) => entry.parent === folderId)
     .sort((a, b) => {
       // Folders first
@@ -271,7 +283,9 @@ export function getBreadcrumbPath(
   const folders: ManifestEntry[] = [];
 
   while (current) {
-    const folder = manifest.find((e) => e.id === current && e.type === "folder");
+    const folder = manifest.entries.find(
+      (e) => e.id === current && e.type === "folder"
+    );
     if (folder) {
       folders.unshift(folder);
       current = folder.parent;
@@ -288,7 +302,7 @@ export function getBreadcrumbPath(
  * Get total size of files in manifest
  */
 export function getTotalSize(manifest: VaultManifest): number {
-  return manifest.reduce((total, entry) => {
+  return manifest.entries.reduce((total, entry) => {
     if (entry.type === "file" && entry.size) {
       return total + entry.size;
     }
@@ -297,17 +311,39 @@ export function getTotalSize(manifest: VaultManifest): number {
 }
 
 /**
+ * Get total size of all files in a folder (recursively includes subfolders)
+ */
+export function getFolderSize(
+  manifest: VaultManifest,
+  folderId: string
+): number {
+  let totalSize = 0;
+
+  for (const entry of manifest.entries) {
+    if (entry.parent === folderId) {
+      if (entry.type === "file" && entry.size) {
+        totalSize += entry.size;
+      } else if (entry.type === "folder") {
+        totalSize += getFolderSize(manifest, entry.id);
+      }
+    }
+  }
+
+  return totalSize;
+}
+
+/**
  * Get file count in manifest
  */
 export function getFileCount(manifest: VaultManifest): number {
-  return manifest.filter((e) => e.type === "file").length;
+  return manifest.entries.filter((e) => e.type === "file").length;
 }
 
 /**
  * Get folder count in manifest
  */
 export function getFolderCount(manifest: VaultManifest): number {
-  return manifest.filter((e) => e.type === "folder").length;
+  return manifest.entries.filter((e) => e.type === "folder").length;
 }
 
 /**
@@ -318,7 +354,7 @@ export function isDescendantOf(
   entryId: string,
   ancestorId: string
 ): boolean {
-  const entry = manifest.find((e) => e.id === entryId);
+  const entry = manifest.entries.find((e) => e.id === entryId);
   if (!entry || !entry.parent) return false;
   if (entry.parent === ancestorId) return true;
   return isDescendantOf(manifest, entry.parent, ancestorId);

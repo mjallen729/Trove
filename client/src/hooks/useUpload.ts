@@ -26,8 +26,14 @@ interface UseUploadReturn {
 }
 
 export function useUpload(): UseUploadReturn {
-  const { getClient, getEncryptionKey, vaultUid, updateManifest, updateStorageUsed } =
-    useVault();
+  const {
+    getClient,
+    getEncryptionKey,
+    getChunkPathPepper,
+    vaultUid,
+    updateManifest,
+    updateStorageUsed,
+  } = useVault();
   const { showToast } = useToast();
   const [uploadQueue, setUploadQueue] = useState<UploadItem[]>([]);
   const uploadQueueRef = useRef<UploadItem[]>([]);
@@ -41,7 +47,8 @@ export function useUpload(): UseUploadReturn {
     const client = getClient();
     const encryptionKey = getEncryptionKey();
 
-    if (!client || !encryptionKey || !vaultUid) return;
+    const chunkPathPepper = getChunkPathPepper();
+    if (!client || !encryptionKey || !vaultUid || !chunkPathPepper) return;
 
     // Read from ref to get latest state (avoids stale closure)
     const currentQueue = uploadQueueRef.current;
@@ -71,9 +78,9 @@ export function useUpload(): UseUploadReturn {
     // Start uploads (don't await)
     toStart.forEach((item) => {
       activeUploadsRef.current++;
-      uploadFile(item, client, encryptionKey);
+      uploadFile(item, client, encryptionKey, chunkPathPepper);
     });
-  }, [getClient, getEncryptionKey, vaultUid]);
+  }, [getClient, getEncryptionKey, getChunkPathPepper, vaultUid]);
 
   // Effect to process queue
   useEffect(() => {
@@ -83,7 +90,8 @@ export function useUpload(): UseUploadReturn {
   const uploadFile = async (
     item: UploadItem,
     client: NonNullable<ReturnType<typeof getClient>>,
-    encryptionKey: Uint8Array
+    encryptionKey: Uint8Array,
+    chunkPathPepper: string
   ) => {
     const { file, file_uid, totalChunks, parentId } = item;
 
@@ -138,7 +146,12 @@ export function useUpload(): UseUploadReturn {
               const encrypted = await encryptChunk(chunk, encryptionKey);
 
               // Get storage path
-              const path = await getChunkPath(vaultUid!, file_uid, chunkIndex);
+              const path = await getChunkPath(
+                vaultUid!,
+                file_uid,
+                chunkPathPepper,
+                chunkIndex
+              );
 
               // Upload to storage
               const { error } = await client.storage
@@ -161,10 +174,13 @@ export function useUpload(): UseUploadReturn {
               }
 
               // Update received_chunks on server
-              const { error: rpcError } = await client.rpc("append_received_chunk", {
-                p_file_uid: file_uid,
-                p_chunk_index: chunkIndex,
-              });
+              const { error: rpcError } = await client.rpc(
+                "append_received_chunk",
+                {
+                  p_file_uid: file_uid,
+                  p_chunk_index: chunkIndex,
+                }
+              );
 
               if (rpcError) {
                 uploadLogger.error("RPC append_received_chunk failed:", {
@@ -235,7 +251,10 @@ export function useUpload(): UseUploadReturn {
       });
 
       // Delete upload record (complete)
-      const { error: deleteError } = await client.from(TABLES.UPLOADS).delete().eq("file_uid", file_uid);
+      const { error: deleteError } = await client
+        .from(TABLES.UPLOADS)
+        .delete()
+        .eq("file_uid", file_uid);
 
       if (deleteError) {
         uploadLogger.error("Upload record delete failed:", {
@@ -268,9 +287,15 @@ export function useUpload(): UseUploadReturn {
       const errorMessage = err instanceof Error ? err.message : "Upload failed";
 
       if (errorMessage === "Upload cancelled") {
-        uploadLogger.log("Upload cancelled:", { fileName: file.name, fileUid: file_uid });
+        uploadLogger.log("Upload cancelled:", {
+          fileName: file.name,
+          fileUid: file_uid,
+        });
         // Clean up cancelled upload
-        const { error: cancelDeleteError } = await client.from(TABLES.UPLOADS).delete().eq("file_uid", file_uid);
+        const { error: cancelDeleteError } = await client
+          .from(TABLES.UPLOADS)
+          .delete()
+          .eq("file_uid", file_uid);
         if (cancelDeleteError) {
           uploadLogger.error("Cancelled upload record delete failed:", {
             code: cancelDeleteError.code,
