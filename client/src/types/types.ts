@@ -89,7 +89,7 @@ export interface Toast {
 }
 
 // Constants
-export const CHUNK_SIZE = 5_000_000; // 5MB
+export const CHUNK_SIZE = 10_000_000; // 10MB
 export const MAX_CONCURRENT_UPLOADS = 3;
 export const MAX_CONCURRENT_CHUNKS = 3;
 export const MAX_FILE_NAME_LENGTH = 255;
