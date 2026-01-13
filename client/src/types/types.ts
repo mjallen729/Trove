@@ -12,7 +12,10 @@ export interface ManifestEntry {
   created_at: string;
 }
 
-export type VaultManifest = ManifestEntry[];
+export interface VaultManifest {
+  chunk_path_pepper: string;
+  entries: ManifestEntry[];
+}
 
 // Vault metadata from server
 export interface VaultRecord {

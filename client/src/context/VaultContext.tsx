@@ -4,6 +4,7 @@ import {
   useReducer,
   useCallback,
   useRef,
+  useEffect,
   type ReactNode,
 } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -13,7 +14,13 @@ import {
   supabaseBase,
   TABLES,
 } from "../utils/supabase";
-import { deriveKeys, encrypt, decrypt, secureWipe } from "../utils/crypto";
+import {
+  deriveKeys,
+  encrypt,
+  decrypt,
+  secureWipe,
+  generateFileUid,
+} from "../utils/crypto";
 import { vaultLogger } from "../utils/logger";
 import {
   type VaultManifest,
@@ -78,7 +85,7 @@ const initialState: VaultState = {
   isLoading: false,
   error: null,
   vaultUid: null,
-  manifest: [],
+  manifest: { chunk_path_pepper: "", entries: [] },
   storageUsed: 0,
   storageLimit: 5368709120, // 5GB
   burnAt: null,
@@ -123,12 +130,15 @@ interface VaultContextValue extends VaultState {
   ) => Promise<boolean>;
   logout: () => Promise<void>;
   updateManifest: (
-    manifestOrUpdater: VaultManifest | ((current: VaultManifest) => VaultManifest)
+    manifestOrUpdater:
+      | VaultManifest
+      | ((current: VaultManifest) => VaultManifest)
   ) => Promise<void>;
   updateStorageUsed: (delta: number) => Promise<void>;
   clearError: () => void;
   getClient: () => SupabaseClient | null;
   getEncryptionKey: () => Uint8Array | null;
+  getChunkPathPepper: () => string | null;
 }
 
 const VaultContext = createContext<VaultContextValue | null>(null);
@@ -171,8 +181,20 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   manifestRef.current = state.manifest;
   const manifestUpdateLockRef = useRef<Promise<void>>(Promise.resolve());
 
+  // Storage ref for atomic updates (avoids race condition when multiple files upload simultaneously)
+  const storageUsedRef = useRef(state.storageUsed);
+
+  // Sync storage ref when vault is unlocked (external state change)
+  useEffect(() => {
+    storageUsedRef.current = state.storageUsed;
+  }, [state.vaultUid]); // Only sync when vault changes, not on every storage update
+
   const getEncryptionKey = useCallback(() => encryptionKeyRef.current, []);
   const getClient = useCallback(() => vaultClientRef.current, []);
+  const getChunkPathPepper = useCallback(
+    () => (state.isUnlocked ? state.manifest.chunk_path_pepper : null),
+    [state.isUnlocked, state.manifest.chunk_path_pepper]
+  );
 
   const clearError = useCallback(() => {
     dispatch({ type: "CLEAR_ERROR" });
@@ -208,8 +230,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         // Calculate burn_at timestamp
         const burnAt = calculateBurnAt(burnTimer);
 
-        // Encrypt empty manifest
-        const emptyManifest: VaultManifest = [];
+        // Encrypt empty manifest with fresh chunk_path_pepper
+        const emptyManifest: VaultManifest = {
+          chunk_path_pepper: generateFileUid(),
+          entries: [],
+        };
         const manifestJson = JSON.stringify(emptyManifest);
         const manifestBytes = new TextEncoder().encode(manifestJson);
         const manifestCipher = await encrypt(manifestBytes, encryptionKey);
@@ -259,7 +284,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
             hint: transactError.hint,
           });
         } else {
-          vaultLogger.log("Free storage transaction created:", FREE_STORAGE_BYTES, "bytes");
+          vaultLogger.log(
+            "Free storage transaction created:",
+            FREE_STORAGE_BYTES,
+            "bytes"
+          );
         }
 
         // Store keys in refs
@@ -307,12 +336,17 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           .single();
 
         if (error || !data) {
-          vaultLogger.error("Fetch failed:", error ? {
-            code: error.code,
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-          } : "No data returned");
+          vaultLogger.error(
+            "Fetch failed:",
+            error
+              ? {
+                  code: error.code,
+                  message: error.message,
+                  details: error.details,
+                  hint: error.hint,
+                }
+              : "No data returned"
+          );
           await secureWipe(encryptionKey);
           throw new Error("Unable to access vault");
         }
@@ -329,7 +363,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         let manifest: VaultManifest;
 
         try {
-          const manifestBytes = await decrypt(manifestCipherArray, encryptionKey);
+          const manifestBytes = await decrypt(
+            manifestCipherArray,
+            encryptionKey
+          );
           const manifestJson = new TextDecoder().decode(manifestBytes);
           manifest = JSON.parse(manifestJson);
         } catch (decryptError) {
@@ -339,9 +376,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         }
 
         vaultLogger.log("Manifest decrypted:", {
-          entries: manifest.length,
-          files: manifest.filter((e) => e.type === "file").length,
-          folders: manifest.filter((e) => e.type === "folder").length,
+          entries: manifest.entries.length,
+          files: manifest.entries.filter((e) => e.type === "file").length,
+          folders: manifest.entries.filter((e) => e.type === "folder").length,
           manifest,
         });
 
@@ -415,7 +452,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const updateManifest = useCallback(
     async (
-      manifestOrUpdater: VaultManifest | ((current: VaultManifest) => VaultManifest)
+      manifestOrUpdater:
+        | VaultManifest
+        | ((current: VaultManifest) => VaultManifest)
     ): Promise<void> => {
       // Chain onto existing updates to serialize them
       const previousUpdate = manifestUpdateLockRef.current;
@@ -463,9 +502,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         }
 
         vaultLogger.log("Manifest updated:", {
-          entries: manifest.length,
-          files: manifest.filter((e) => e.type === "file").length,
-          folders: manifest.filter((e) => e.type === "folder").length,
+          entries: manifest.entries.length,
+          files: manifest.entries.filter((e) => e.type === "file").length,
+          folders: manifest.entries.filter((e) => e.type === "folder").length,
           manifest,
         });
 
@@ -481,7 +520,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const updateStorageUsed = useCallback(
     async (delta: number) => {
-      const newStorageUsed = state.storageUsed + delta;
+      // Update ref synchronously to avoid race conditions when multiple files upload
+      storageUsedRef.current += delta;
+      const newStorageUsed = storageUsedRef.current;
+
       dispatch({ type: "UPDATE_STORAGE", payload: newStorageUsed });
 
       // Persist to Supabase
@@ -500,7 +542,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [state.storageUsed, state.vaultUid]
+    [state.vaultUid]
   );
 
   const value: VaultContextValue = {
@@ -513,6 +555,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     clearError,
     getClient,
     getEncryptionKey,
+    getChunkPathPepper,
   };
 
   return (

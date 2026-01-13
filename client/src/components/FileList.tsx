@@ -1,11 +1,11 @@
 import { useState, useCallback, useMemo } from "react";
-import type { ManifestEntry } from "../types/types";
+import type { ManifestEntry, VaultManifest } from "../types/types";
 import { FileRow } from "./FileRow";
 import { getEntriesInFolder } from "../utils/manifest";
 import { Button } from "./ui/Button";
 
 interface FileListProps {
-  manifest: ManifestEntry[];
+  manifest: VaultManifest;
   currentFolderId: string | null;
   onNavigate: (folderId: string | null) => void;
   onDownload: (file: ManifestEntry) => void;
@@ -49,9 +49,13 @@ export function FileList({
           newSelected.add(entry.id);
         }
       } else {
-        // Single selection
-        newSelected.clear();
-        newSelected.add(entry.id);
+        // Single selection - toggle if clicking already-selected single item
+        if (selectedIds.size === 1 && selectedIds.has(entry.id)) {
+          newSelected.delete(entry.id);
+        } else {
+          newSelected.clear();
+          newSelected.add(entry.id);
+        }
       }
 
       setSelectedIds(newSelected);
@@ -76,15 +80,14 @@ export function FileList({
 
   const handleDoubleClick = useCallback(
     (entry: ManifestEntry) => {
+      // Only navigate into folders on double-click, files do nothing
       if (entry.type === "folder") {
         onNavigate(entry.id);
         setSelectedIds(new Set());
         setLastSelectedIndex(null);
-      } else {
-        onDownload(entry);
       }
     },
-    [onNavigate, onDownload]
+    [onNavigate]
   );
 
   const handleDeleteSelected = useCallback(() => {
@@ -169,6 +172,7 @@ export function FileList({
           <FileRow
             key={entry.id}
             entry={entry}
+            manifest={manifest}
             isSelected={selectedIds.has(entry.id)}
             onClick={(e) => handleSelect(entry, index, e)}
             onDoubleClick={() => handleDoubleClick(entry)}

@@ -1,9 +1,9 @@
 import { useMemo } from "react";
-import type { ManifestEntry } from "../types/types";
+import type { VaultManifest } from "../types/types";
 import { getBreadcrumbPath } from "../utils/manifest";
 
 interface FolderBreadcrumbsProps {
-  manifest: ManifestEntry[];
+  manifest: VaultManifest;
   currentFolderId: string | null;
   onNavigate: (folderId: string | null) => void;
 }

@@ -11,12 +11,16 @@ import { FileList } from "../components/FileList";
 import { FolderBreadcrumbs } from "../components/FolderBreadcrumbs";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { UploadQueue } from "../components/UploadQueue";
-import { UploadDropzone } from "../components/UploadDropzone";
+import {
+  UploadDropzone,
+  type FolderUploadInfo,
+} from "../components/UploadDropzone";
 import { IdleTimeoutModal } from "../components/IdleTimeoutModal";
 import type { ManifestEntry } from "../types/types";
 import {
   createFolder,
   addEntry,
+  addEntries,
   removeEntries,
   getUniqueName,
 } from "../utils/manifest";
@@ -35,6 +39,7 @@ export function Vault() {
     burnAt,
     vaultUid,
     getClient,
+    getChunkPathPepper,
     updateStorageUsed,
   } = useVault();
   const { showToast } = useToast();
@@ -46,7 +51,9 @@ export function Vault() {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<ManifestEntry[] | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ManifestEntry[] | null>(
+    null
+  );
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Format bytes helper
@@ -112,11 +119,16 @@ export function Vault() {
     if (!deleteTarget || !vaultUid) return;
 
     const client = getClient();
-    if (!client) return;
+    const chunkPathPepper = getChunkPathPepper();
+    if (!client || !chunkPathPepper) return;
 
     deleteLogger.log("Starting delete:", {
       targetCount: deleteTarget.length,
-      targets: deleteTarget.map((e) => ({ name: e.name, type: e.type, id: e.id })),
+      targets: deleteTarget.map((e) => ({
+        name: e.name,
+        type: e.type,
+        id: e.id,
+      })),
     });
 
     setIsDeleting(true);
@@ -140,7 +152,12 @@ export function Vault() {
       for (const file of removedFiles) {
         if (file.file_uid && file.chunk_count) {
           for (let i = 0; i < file.chunk_count; i++) {
-            const path = await getChunkPath(vaultUid, file.file_uid, i);
+            const path = await getChunkPath(
+              vaultUid,
+              file.file_uid,
+              chunkPathPepper,
+              i
+            );
             chunkPaths.push(path);
           }
         }
@@ -168,7 +185,10 @@ export function Vault() {
       await updateManifest(newManifest);
 
       // Update storage used (subtract deleted file sizes)
-      const deletedBytes = removedFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+      const deletedBytes = removedFiles.reduce(
+        (sum, f) => sum + (f.size || 0),
+        0
+      );
       if (deletedBytes > 0) {
         updateStorageUsed(-deletedBytes);
       }
@@ -191,24 +211,165 @@ export function Vault() {
       setIsDeleting(false);
       setDeleteTarget(null);
     }
-  }, [deleteTarget, manifest, updateManifest, showToast, vaultUid, getClient, updateStorageUsed]);
+  }, [
+    deleteTarget,
+    manifest,
+    updateManifest,
+    showToast,
+    vaultUid,
+    getClient,
+    getChunkPathPepper,
+    updateStorageUsed,
+  ]);
 
   const handleFilesDropped = useCallback(
-    (files: File[]) => {
-      addToQueue(files, currentFolderId);
+    async (files: File[], folderInfo?: FolderUploadInfo) => {
+      if (folderInfo) {
+        // Create folder structure from dropped folder
+        const uniqueFolderName = getUniqueName(
+          manifest,
+          folderInfo.name,
+          currentFolderId,
+          true
+        );
+        const rootFolder = createFolder(uniqueFolderName, currentFolderId);
+
+        // Map relative paths to folder IDs
+        const folderMap = new Map<string, string>();
+        folderMap.set("", rootFolder.id);
+
+        const foldersToCreate: ManifestEntry[] = [rootFolder];
+
+        // Create all needed subfolders
+        for (const [, relativePath] of folderInfo.relativePaths) {
+          const pathParts = relativePath.split("/");
+          pathParts.pop(); // Remove filename, keep only directory parts
+
+          let currentPath = "";
+          let parentId = rootFolder.id;
+
+          for (const part of pathParts) {
+            const newPath = currentPath ? `${currentPath}/${part}` : part;
+
+            if (!folderMap.has(newPath)) {
+              const subFolder = createFolder(part, parentId);
+              folderMap.set(newPath, subFolder.id);
+              foldersToCreate.push(subFolder);
+            }
+
+            parentId = folderMap.get(newPath)!;
+            currentPath = newPath;
+          }
+        }
+
+        // Update manifest with all folders
+        try {
+          await updateManifest(addEntries(manifest, foldersToCreate));
+        } catch {
+          showToast("Failed to create folder structure", "error");
+          return;
+        }
+
+        // Add files to queue with correct parent IDs
+        for (const [file, relativePath] of folderInfo.relativePaths) {
+          const pathParts = relativePath.split("/");
+          pathParts.pop(); // Remove filename
+          const parentPath = pathParts.join("/");
+          const parentId = folderMap.get(parentPath) || rootFolder.id;
+
+          addToQueue([file], parentId);
+        }
+      } else {
+        // Normal file upload to current folder
+        addToQueue(files, currentFolderId);
+      }
     },
-    [addToQueue, currentFolderId]
+    [addToQueue, currentFolderId, manifest, updateManifest, showToast]
   );
 
   const handleFileInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
-      if (files.length > 0) {
+      if (files.length === 0) {
+        e.target.value = "";
+        return;
+      }
+
+      // Check if this is a folder upload (files have webkitRelativePath)
+      const firstFile = files[0];
+      if (firstFile.webkitRelativePath) {
+        // Extract root folder name from first file's path
+        const rootFolderName = firstFile.webkitRelativePath.split("/")[0];
+
+        // Build relativePaths map (remove root folder from path since we're creating it)
+        const relativePaths = new Map<File, string>();
+        for (const file of files) {
+          const pathParts = file.webkitRelativePath.split("/");
+          pathParts.shift(); // Remove root folder name
+          relativePaths.set(file, pathParts.join("/"));
+        }
+
+        // Create folder structure
+        const uniqueFolderName = getUniqueName(
+          manifest,
+          rootFolderName,
+          currentFolderId,
+          true
+        );
+        const rootFolder = createFolder(uniqueFolderName, currentFolderId);
+
+        const folderMap = new Map<string, string>();
+        folderMap.set("", rootFolder.id);
+
+        const foldersToCreate: ManifestEntry[] = [rootFolder];
+
+        for (const [, relativePath] of relativePaths) {
+          const pathParts = relativePath.split("/");
+          pathParts.pop(); // Remove filename
+
+          let currentPath = "";
+          let parentId = rootFolder.id;
+
+          for (const part of pathParts) {
+            if (!part) continue;
+            const newPath = currentPath ? `${currentPath}/${part}` : part;
+
+            if (!folderMap.has(newPath)) {
+              const subFolder = createFolder(part, parentId);
+              folderMap.set(newPath, subFolder.id);
+              foldersToCreate.push(subFolder);
+            }
+
+            parentId = folderMap.get(newPath)!;
+            currentPath = newPath;
+          }
+        }
+
+        try {
+          await updateManifest(addEntries(manifest, foldersToCreate));
+        } catch {
+          showToast("Failed to create folder structure", "error");
+          e.target.value = "";
+          return;
+        }
+
+        // Add files to queue with correct parent IDs
+        for (const [file, relativePath] of relativePaths) {
+          const pathParts = relativePath.split("/");
+          pathParts.pop();
+          const parentPath = pathParts.join("/");
+          const parentId = folderMap.get(parentPath) || rootFolder.id;
+
+          addToQueue([file], parentId);
+        }
+      } else {
+        // Normal file upload
         addToQueue(files, currentFolderId);
       }
+
       e.target.value = "";
     },
-    [addToQueue, currentFolderId]
+    [addToQueue, currentFolderId, manifest, updateManifest, showToast]
   );
 
   return (

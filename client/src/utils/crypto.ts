@@ -12,8 +12,8 @@ export async function getSodium(): Promise<typeof _sodium> {
 }
 
 // Argon2id parameters (OWASP Spec)
-const ARGON2_MEMORY_KB = 25 * 1000;  // 25 MB (OWASP min: 19MB)
-const ARGON2_ITERATIONS = 2;  // OWASP min: 2
+const ARGON2_MEMORY_KB = 25 * 1000; // 25 MB (OWASP min: 19MB)
+const ARGON2_ITERATIONS = 2; // OWASP min: 2
 const FIXED_SALT = "trove-v1-salt-2026";
 const KEY_LENGTH = 32;
 
@@ -213,16 +213,19 @@ export async function decryptToString(
 }
 
 /**
- * Derive deterministic chunk UID from file UID and chunk index
- * chunk_uid = SHA256(file_uid || ":" || chunk_index)
+ * Derive deterministic chunk UID from file UID, pepper, and chunk index
+ * chunk_uid = BLAKE2b(file_uid || ":" || chunk_path_pepper || ":" || chunk_index)
  */
 export async function deriveChunkUid(
   fileUid: string,
+  chunkPathPepper: string,
   chunkIndex: number
 ): Promise<string> {
   const sodium = await getSodium();
 
-  const input = sodium.from_string(`${fileUid}:${chunkIndex}`);
+  const input = sodium.from_string(
+    `${fileUid}:${chunkPathPepper}:${chunkIndex}`
+  );
   const hash = sodium.crypto_generichash(32, input);
 
   return sodium.to_hex(hash);

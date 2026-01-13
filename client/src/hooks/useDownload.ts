@@ -18,7 +18,8 @@ interface UseDownloadReturn {
 }
 
 export function useDownload(): UseDownloadReturn {
-  const { getClient, getEncryptionKey, vaultUid } = useVault();
+  const { getClient, getEncryptionKey, getChunkPathPepper, vaultUid } =
+    useVault();
   const { showToast } = useToast();
   const [downloads, setDownloads] = useState<DownloadProgress[]>([]);
 
@@ -31,8 +32,9 @@ export function useDownload(): UseDownloadReturn {
 
       const client = getClient();
       const encryptionKey = getEncryptionKey();
+      const chunkPathPepper = getChunkPathPepper();
 
-      if (!client || !encryptionKey || !vaultUid) {
+      if (!client || !encryptionKey || !vaultUid || !chunkPathPepper) {
         showToast("Vault not unlocked", "error");
         return;
       }
@@ -63,7 +65,12 @@ export function useDownload(): UseDownloadReturn {
 
         // Download and decrypt each chunk
         for (let i = 0; i < totalChunks; i++) {
-          const path = await getChunkPath(vaultUid, file.file_uid, i);
+          const path = await getChunkPath(
+            vaultUid,
+            file.file_uid,
+            chunkPathPepper,
+            i
+          );
 
           const { data, error } = await client.storage
             .from(STORAGE_BUCKET)
@@ -178,7 +185,7 @@ export function useDownload(): UseDownloadReturn {
         }, 5000);
       }
     },
-    [getClient, getEncryptionKey, vaultUid, showToast]
+    [getClient, getEncryptionKey, getChunkPathPepper, vaultUid, showToast]
   );
 
   const isDownloading = downloads.some(
