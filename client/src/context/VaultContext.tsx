@@ -16,7 +16,7 @@ import {
 import { deriveKeys, encrypt, decrypt, secureWipe } from "../utils/crypto";
 import { vaultLogger } from "../utils/logger";
 import {
-  type VaultSchema,
+  type VaultManifest,
   type BurnTimerOption,
   FREE_STORAGE_BYTES,
 } from "../types/types";
@@ -48,7 +48,7 @@ interface VaultState {
   isLoading: boolean;
   error: string | null;
   vaultUid: string | null;
-  schema: VaultSchema;
+  manifest: VaultManifest;
   storageUsed: number;
   storageLimit: number;
   burnAt: string | null;
@@ -61,14 +61,14 @@ type VaultAction =
       type: "UNLOCK_SUCCESS";
       payload: {
         vaultUid: string;
-        schema: VaultSchema;
+        manifest: VaultManifest;
         storageUsed: number;
         storageLimit: number;
         burnAt: string | null;
       };
     }
   | { type: "UNLOCK_ERROR"; payload: string }
-  | { type: "UPDATE_SCHEMA"; payload: VaultSchema }
+  | { type: "UPDATE_MANIFEST"; payload: VaultManifest }
   | { type: "UPDATE_STORAGE"; payload: number }
   | { type: "CLEAR_ERROR" }
   | { type: "LOGOUT" };
@@ -78,7 +78,7 @@ const initialState: VaultState = {
   isLoading: false,
   error: null,
   vaultUid: null,
-  schema: [],
+  manifest: [],
   storageUsed: 0,
   storageLimit: 5368709120, // 5GB
   burnAt: null,
@@ -94,15 +94,15 @@ function vaultReducer(state: VaultState, action: VaultAction): VaultState {
         isLoading: false,
         isUnlocked: true,
         vaultUid: action.payload.vaultUid,
-        schema: action.payload.schema,
+        manifest: action.payload.manifest,
         storageUsed: action.payload.storageUsed,
         storageLimit: action.payload.storageLimit,
         burnAt: action.payload.burnAt,
       };
     case "UNLOCK_ERROR":
       return { ...state, isLoading: false, error: action.payload };
-    case "UPDATE_SCHEMA":
-      return { ...state, schema: action.payload };
+    case "UPDATE_MANIFEST":
+      return { ...state, manifest: action.payload };
     case "UPDATE_STORAGE":
       return { ...state, storageUsed: action.payload };
     case "CLEAR_ERROR":
@@ -122,8 +122,8 @@ interface VaultContextValue extends VaultState {
     burnTimer: BurnTimerOption
   ) => Promise<boolean>;
   logout: () => Promise<void>;
-  updateSchema: (
-    schemaOrUpdater: VaultSchema | ((current: VaultSchema) => VaultSchema)
+  updateManifest: (
+    manifestOrUpdater: VaultManifest | ((current: VaultManifest) => VaultManifest)
   ) => Promise<void>;
   updateStorageUsed: (delta: number) => Promise<void>;
   clearError: () => void;
@@ -166,10 +166,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const encryptionKeyRef = useRef<Uint8Array | null>(null);
   const vaultClientRef = useRef<SupabaseClient | null>(null);
 
-  // Schema ref for atomic updates (avoids race conditions)
-  const schemaRef = useRef<VaultSchema>(state.schema);
-  schemaRef.current = state.schema;
-  const schemaUpdateLockRef = useRef<Promise<void>>(Promise.resolve());
+  // Manifest ref for atomic updates (avoids race conditions)
+  const manifestRef = useRef<VaultManifest>(state.manifest);
+  manifestRef.current = state.manifest;
+  const manifestUpdateLockRef = useRef<Promise<void>>(Promise.resolve());
 
   const getEncryptionKey = useCallback(() => encryptionKeyRef.current, []);
   const getClient = useCallback(() => vaultClientRef.current, []);
@@ -208,16 +208,16 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         // Calculate burn_at timestamp
         const burnAt = calculateBurnAt(burnTimer);
 
-        // Encrypt empty schema
-        const emptySchema: VaultSchema = [];
-        const schemaJson = JSON.stringify(emptySchema);
-        const schemaBytes = new TextEncoder().encode(schemaJson);
-        const schemaCipher = await encrypt(schemaBytes, encryptionKey);
+        // Encrypt empty manifest
+        const emptyManifest: VaultManifest = [];
+        const manifestJson = JSON.stringify(emptyManifest);
+        const manifestBytes = new TextEncoder().encode(manifestJson);
+        const manifestCipher = await encrypt(manifestBytes, encryptionKey);
 
         // Create vault record (using base client, no header needed for insert)
         const { error } = await supabaseBase.from(TABLES.VAULTS).insert({
           uid: vaultUid,
-          schema_cipher: bytesToHex(schemaCipher),
+          manifest_cipher: bytesToHex(manifestCipher),
           burn_at: burnAt,
           storage_limit: FREE_STORAGE_BYTES,
         });
@@ -270,7 +270,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           type: "UNLOCK_SUCCESS",
           payload: {
             vaultUid,
-            schema: emptySchema,
+            manifest: emptyManifest,
             storageUsed: 0,
             storageLimit: FREE_STORAGE_BYTES,
             burnAt,
@@ -324,25 +324,25 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           burnAt: data.burn_at,
         });
 
-        // Decrypt schema - Supabase returns BYTEA as hex string
-        const schemaCipherArray = hexToBytes(data.schema_cipher);
-        let schema: VaultSchema;
+        // Decrypt manifest - Supabase returns BYTEA as hex string
+        const manifestCipherArray = hexToBytes(data.manifest_cipher);
+        let manifest: VaultManifest;
 
         try {
-          const schemaBytes = await decrypt(schemaCipherArray, encryptionKey);
-          const schemaJson = new TextDecoder().decode(schemaBytes);
-          schema = JSON.parse(schemaJson);
+          const manifestBytes = await decrypt(manifestCipherArray, encryptionKey);
+          const manifestJson = new TextDecoder().decode(manifestBytes);
+          manifest = JSON.parse(manifestJson);
         } catch (decryptError) {
           vaultLogger.error("Decryption failed:", decryptError);
           await secureWipe(encryptionKey);
           throw new Error("Unable to access vault");
         }
 
-        vaultLogger.log("Schema decrypted:", {
-          entries: schema.length,
-          files: schema.filter((e) => e.type === "file").length,
-          folders: schema.filter((e) => e.type === "folder").length,
-          schema,
+        vaultLogger.log("Manifest decrypted:", {
+          entries: manifest.length,
+          files: manifest.filter((e) => e.type === "file").length,
+          folders: manifest.filter((e) => e.type === "folder").length,
+          manifest,
         });
 
         // Sum all storage transactions to calculate current limit
@@ -394,7 +394,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           type: "UNLOCK_SUCCESS",
           payload: {
             vaultUid,
-            schema,
+            manifest,
             storageUsed: data.storage_used,
             storageLimit,
             burnAt: data.burn_at,
@@ -413,14 +413,14 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const updateSchema = useCallback(
+  const updateManifest = useCallback(
     async (
-      schemaOrUpdater: VaultSchema | ((current: VaultSchema) => VaultSchema)
+      manifestOrUpdater: VaultManifest | ((current: VaultManifest) => VaultManifest)
     ): Promise<void> => {
       // Chain onto existing updates to serialize them
-      const previousUpdate = schemaUpdateLockRef.current;
+      const previousUpdate = manifestUpdateLockRef.current;
       let resolve: () => void;
-      schemaUpdateLockRef.current = new Promise<void>((r) => {
+      manifestUpdateLockRef.current = new Promise<void>((r) => {
         resolve = r;
       });
 
@@ -435,25 +435,25 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           throw new Error("Vault not unlocked");
         }
 
-        // Get the schema to save - either directly or via updater function
-        const schema =
-          typeof schemaOrUpdater === "function"
-            ? schemaOrUpdater(schemaRef.current)
-            : schemaOrUpdater;
+        // Get the manifest to save - either directly or via updater function
+        const manifest =
+          typeof manifestOrUpdater === "function"
+            ? manifestOrUpdater(manifestRef.current)
+            : manifestOrUpdater;
 
-        // Encrypt new schema
-        const schemaJson = JSON.stringify(schema);
-        const schemaBytes = new TextEncoder().encode(schemaJson);
-        const schemaCipher = await encrypt(schemaBytes, encryptionKey);
+        // Encrypt new manifest
+        const manifestJson = JSON.stringify(manifest);
+        const manifestBytes = new TextEncoder().encode(manifestJson);
+        const manifestCipher = await encrypt(manifestBytes, encryptionKey);
 
         // Update on server
         const { error } = await client
           .from(TABLES.VAULTS)
-          .update({ schema_cipher: bytesToHex(schemaCipher) })
+          .update({ manifest_cipher: bytesToHex(manifestCipher) })
           .eq("uid", state.vaultUid);
 
         if (error) {
-          vaultLogger.error("Schema update failed:", {
+          vaultLogger.error("Manifest update failed:", {
             code: error.code,
             message: error.message,
             details: error.details,
@@ -462,16 +462,16 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           throw error;
         }
 
-        vaultLogger.log("Schema updated:", {
-          entries: schema.length,
-          files: schema.filter((e) => e.type === "file").length,
-          folders: schema.filter((e) => e.type === "folder").length,
-          schema,
+        vaultLogger.log("Manifest updated:", {
+          entries: manifest.length,
+          files: manifest.filter((e) => e.type === "file").length,
+          folders: manifest.filter((e) => e.type === "folder").length,
+          manifest,
         });
 
         // Update ref immediately so next queued update sees it
-        schemaRef.current = schema;
-        dispatch({ type: "UPDATE_SCHEMA", payload: schema });
+        manifestRef.current = manifest;
+        dispatch({ type: "UPDATE_MANIFEST", payload: manifest });
       } finally {
         resolve!();
       }
@@ -508,7 +508,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     unlockVault,
     createVault,
     logout,
-    updateSchema,
+    updateManifest,
     updateStorageUsed,
     clearError,
     getClient,

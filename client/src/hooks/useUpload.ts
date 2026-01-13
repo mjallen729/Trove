@@ -10,7 +10,7 @@ import {
   encryptChunk,
   getChunkPath,
 } from "../utils/chunks";
-import { createFileEntry, addEntry, getUniqueName } from "../utils/schema";
+import { createFileEntry, addEntry, getUniqueName } from "../utils/manifest";
 import { STORAGE_BUCKET, TABLES } from "../utils/supabase";
 import { uploadLogger } from "../utils/logger";
 
@@ -26,7 +26,7 @@ interface UseUploadReturn {
 }
 
 export function useUpload(): UseUploadReturn {
-  const { getClient, getEncryptionKey, vaultUid, schema, updateSchema, updateStorageUsed } =
+  const { getClient, getEncryptionKey, vaultUid, updateManifest, updateStorageUsed } =
     useVault();
   const { showToast } = useToast();
   const [uploadQueue, setUploadQueue] = useState<UploadItem[]>([]);
@@ -213,10 +213,10 @@ export function useUpload(): UseUploadReturn {
 
       await Promise.all(uploadChunks);
 
-      // Add to schema atomically using updater function
+      // Add to manifest atomically using updater function
       let finalName = file.name;
-      await updateSchema((currentSchema) => {
-        finalName = getUniqueName(currentSchema, file.name, parentId, false);
+      await updateManifest((currentManifest) => {
+        finalName = getUniqueName(currentManifest, file.name, parentId, false);
         const fileEntry = createFileEntry(
           finalName,
           parentId,
@@ -225,10 +225,10 @@ export function useUpload(): UseUploadReturn {
           totalChunks,
           file.type || "application/octet-stream"
         );
-        return addEntry(currentSchema, fileEntry);
+        return addEntry(currentManifest, fileEntry);
       });
 
-      uploadLogger.log("File added to vault schema:", {
+      uploadLogger.log("File added to vault manifest:", {
         fileName: finalName,
         fileUid: file_uid,
         fileSize: file.size,

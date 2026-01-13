@@ -1,11 +1,11 @@
-import type { SchemaEntry, VaultSchema } from "../types/types";
+import type { ManifestEntry, VaultManifest } from "../types/types";
 import { generateFileUid } from "./crypto";
 import { MAX_FILE_NAME_LENGTH } from "../types/types";
 
 /**
  * Create a new folder entry
  */
-export function createFolder(name: string, parent: string | null): SchemaEntry {
+export function createFolder(name: string, parent: string | null): ManifestEntry {
   return {
     id: generateFileUid(),
     name: truncateName(name),
@@ -25,7 +25,7 @@ export function createFileEntry(
   size: number,
   chunkCount: number,
   mimeType: string
-): SchemaEntry {
+): ManifestEntry {
   return {
     id: generateFileUid(),
     name: truncateName(name),
@@ -57,36 +57,36 @@ function truncateName(name: string): string {
 }
 
 /**
- * Add entry to schema
+ * Add entry to manifest
  */
-export function addEntry(schema: VaultSchema, entry: SchemaEntry): VaultSchema {
-  return [...schema, entry];
+export function addEntry(manifest: VaultManifest, entry: ManifestEntry): VaultManifest {
+  return [...manifest, entry];
 }
 
 /**
- * Add multiple entries to schema
+ * Add multiple entries to manifest
  */
 export function addEntries(
-  schema: VaultSchema,
-  entries: SchemaEntry[]
-): VaultSchema {
-  return [...schema, ...entries];
+  manifest: VaultManifest,
+  entries: ManifestEntry[]
+): VaultManifest {
+  return [...manifest, ...entries];
 }
 
 /**
- * Remove entry from schema (recursive for folders)
- * Returns the updated schema and list of removed file entries (for storage cleanup)
+ * Remove entry from manifest (recursive for folders)
+ * Returns the updated manifest and list of removed file entries (for storage cleanup)
  */
 export function removeEntry(
-  schema: VaultSchema,
+  manifest: VaultManifest,
   entryId: string
-): { schema: VaultSchema; removedFiles: SchemaEntry[] } {
-  const entry = schema.find((e) => e.id === entryId);
-  if (!entry) return { schema, removedFiles: [] };
+): { manifest: VaultManifest; removedFiles: ManifestEntry[] } {
+  const entry = manifest.find((e) => e.id === entryId);
+  if (!entry) return { manifest, removedFiles: [] };
 
   // Collect all IDs to remove (entry + descendants if folder)
   const idsToRemove = new Set<string>([entryId]);
-  const removedFiles: SchemaEntry[] = [];
+  const removedFiles: ManifestEntry[] = [];
 
   if (entry.type === "file") {
     removedFiles.push(entry);
@@ -94,7 +94,7 @@ export function removeEntry(
 
   if (entry.type === "folder") {
     const collectDescendants = (parentId: string) => {
-      schema.forEach((e) => {
+      manifest.forEach((e) => {
         if (e.parent === parentId) {
           idsToRemove.add(e.id);
           if (e.type === "file") {
@@ -108,44 +108,44 @@ export function removeEntry(
     collectDescendants(entryId);
   }
 
-  const newSchema = schema.filter((e) => !idsToRemove.has(e.id));
-  return { schema: newSchema, removedFiles };
+  const newManifest = manifest.filter((e) => !idsToRemove.has(e.id));
+  return { manifest: newManifest, removedFiles };
 }
 
 /**
- * Remove multiple entries from schema
+ * Remove multiple entries from manifest
  */
 export function removeEntries(
-  schema: VaultSchema,
+  manifest: VaultManifest,
   entryIds: string[]
-): { schema: VaultSchema; removedFiles: SchemaEntry[] } {
-  let currentSchema = schema;
-  const allRemovedFiles: SchemaEntry[] = [];
+): { manifest: VaultManifest; removedFiles: ManifestEntry[] } {
+  let currentManifest = manifest;
+  const allRemovedFiles: ManifestEntry[] = [];
 
   for (const id of entryIds) {
-    const result = removeEntry(currentSchema, id);
-    currentSchema = result.schema;
+    const result = removeEntry(currentManifest, id);
+    currentManifest = result.manifest;
     allRemovedFiles.push(...result.removedFiles);
   }
 
-  return { schema: currentSchema, removedFiles: allRemovedFiles };
+  return { manifest: currentManifest, removedFiles: allRemovedFiles };
 }
 
 /**
  * Get all file entries that would be deleted (for storage calculation)
  */
 export function getFilesInEntry(
-  schema: VaultSchema,
+  manifest: VaultManifest,
   entryId: string
-): SchemaEntry[] {
-  const entry = schema.find((e) => e.id === entryId);
+): ManifestEntry[] {
+  const entry = manifest.find((e) => e.id === entryId);
   if (!entry) return [];
 
   if (entry.type === "file") return [entry];
 
-  const files: SchemaEntry[] = [];
+  const files: ManifestEntry[] = [];
   const collectFiles = (parentId: string) => {
-    schema.forEach((e) => {
+    manifest.forEach((e) => {
       if (e.parent === parentId) {
         if (e.type === "file") {
           files.push(e);
@@ -163,11 +163,11 @@ export function getFilesInEntry(
  * Rename an entry
  */
 export function renameEntry(
-  schema: VaultSchema,
+  manifest: VaultManifest,
   entryId: string,
   newName: string
-): VaultSchema {
-  return schema.map((e) =>
+): VaultManifest {
+  return manifest.map((e) =>
     e.id === entryId ? { ...e, name: truncateName(newName) } : e
   );
 }
@@ -176,11 +176,11 @@ export function renameEntry(
  * Move entry to new parent
  */
 export function moveEntry(
-  schema: VaultSchema,
+  manifest: VaultManifest,
   entryId: string,
   newParentId: string | null
-): VaultSchema {
-  return schema.map((e) =>
+): VaultManifest {
+  return manifest.map((e) =>
     e.id === entryId ? { ...e, parent: newParentId } : e
   );
 }
@@ -189,12 +189,12 @@ export function moveEntry(
  * Check if name exists in folder (case-insensitive)
  */
 export function nameExistsInFolder(
-  schema: VaultSchema,
+  manifest: VaultManifest,
   name: string,
   parentId: string | null,
   excludeId?: string
 ): boolean {
-  return schema.some(
+  return manifest.some(
     (e) =>
       e.parent === parentId &&
       e.name.toLowerCase() === name.toLowerCase() &&
@@ -206,12 +206,12 @@ export function nameExistsInFolder(
  * Get unique name for entry (append number if needed)
  */
 export function getUniqueName(
-  schema: VaultSchema,
+  manifest: VaultManifest,
   name: string,
   parentId: string | null,
   isFolder: boolean
 ): string {
-  if (!nameExistsInFolder(schema, name, parentId)) {
+  if (!nameExistsInFolder(manifest, name, parentId)) {
     return name;
   }
 
@@ -222,7 +222,7 @@ export function getUniqueName(
     do {
       uniqueName = `${name} (${counter})`;
       counter++;
-    } while (nameExistsInFolder(schema, uniqueName, parentId));
+    } while (nameExistsInFolder(manifest, uniqueName, parentId));
   } else {
     const lastDot = name.lastIndexOf(".");
     const baseName = lastDot > 0 ? name.slice(0, lastDot) : name;
@@ -231,7 +231,7 @@ export function getUniqueName(
     do {
       uniqueName = `${baseName} (${counter})${ext}`;
       counter++;
-    } while (nameExistsInFolder(schema, uniqueName, parentId));
+    } while (nameExistsInFolder(manifest, uniqueName, parentId));
   }
 
   return uniqueName;
@@ -241,10 +241,10 @@ export function getUniqueName(
  * Get entries in folder (sorted: folders first, then files, alphabetically)
  */
 export function getEntriesInFolder(
-  schema: VaultSchema,
+  manifest: VaultManifest,
   folderId: string | null
-): SchemaEntry[] {
-  return schema
+): ManifestEntry[] {
+  return manifest
     .filter((entry) => entry.parent === folderId)
     .sort((a, b) => {
       // Folders first
@@ -260,7 +260,7 @@ export function getEntriesInFolder(
  * Get breadcrumb path for folder
  */
 export function getBreadcrumbPath(
-  schema: VaultSchema,
+  manifest: VaultManifest,
   folderId: string | null
 ): { id: string | null; name: string }[] {
   const path: { id: string | null; name: string }[] = [
@@ -268,10 +268,10 @@ export function getBreadcrumbPath(
   ];
 
   let current = folderId;
-  const folders: SchemaEntry[] = [];
+  const folders: ManifestEntry[] = [];
 
   while (current) {
-    const folder = schema.find((e) => e.id === current && e.type === "folder");
+    const folder = manifest.find((e) => e.id === current && e.type === "folder");
     if (folder) {
       folders.unshift(folder);
       current = folder.parent;
@@ -285,10 +285,10 @@ export function getBreadcrumbPath(
 }
 
 /**
- * Get total size of files in schema
+ * Get total size of files in manifest
  */
-export function getTotalSize(schema: VaultSchema): number {
-  return schema.reduce((total, entry) => {
+export function getTotalSize(manifest: VaultManifest): number {
+  return manifest.reduce((total, entry) => {
     if (entry.type === "file" && entry.size) {
       return total + entry.size;
     }
@@ -297,29 +297,29 @@ export function getTotalSize(schema: VaultSchema): number {
 }
 
 /**
- * Get file count in schema
+ * Get file count in manifest
  */
-export function getFileCount(schema: VaultSchema): number {
-  return schema.filter((e) => e.type === "file").length;
+export function getFileCount(manifest: VaultManifest): number {
+  return manifest.filter((e) => e.type === "file").length;
 }
 
 /**
- * Get folder count in schema
+ * Get folder count in manifest
  */
-export function getFolderCount(schema: VaultSchema): number {
-  return schema.filter((e) => e.type === "folder").length;
+export function getFolderCount(manifest: VaultManifest): number {
+  return manifest.filter((e) => e.type === "folder").length;
 }
 
 /**
  * Check if entry is descendant of folder
  */
 export function isDescendantOf(
-  schema: VaultSchema,
+  manifest: VaultManifest,
   entryId: string,
   ancestorId: string
 ): boolean {
-  const entry = schema.find((e) => e.id === entryId);
+  const entry = manifest.find((e) => e.id === entryId);
   if (!entry || !entry.parent) return false;
   if (entry.parent === ancestorId) return true;
-  return isDescendantOf(schema, entry.parent, ancestorId);
+  return isDescendantOf(manifest, entry.parent, ancestorId);
 }

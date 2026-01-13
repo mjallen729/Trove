@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useVault } from "../context/VaultContext";
 import { useToast } from "../context/ToastContext";
-import type { SchemaEntry, DownloadProgress } from "../types/types";
+import type { ManifestEntry, DownloadProgress } from "../types/types";
 import {
   decryptChunk,
   getChunkPath,
@@ -13,7 +13,7 @@ import { downloadLogger } from "../utils/logger";
 
 interface UseDownloadReturn {
   downloads: DownloadProgress[];
-  downloadFile: (file: SchemaEntry) => Promise<void>;
+  downloadFile: (file: ManifestEntry) => Promise<void>;
   isDownloading: boolean;
 }
 
@@ -23,7 +23,7 @@ export function useDownload(): UseDownloadReturn {
   const [downloads, setDownloads] = useState<DownloadProgress[]>([]);
 
   const downloadFile = useCallback(
-    async (file: SchemaEntry) => {
+    async (file: ManifestEntry) => {
       if (file.type !== "file" || !file.file_uid || !file.chunk_count) {
         showToast("Invalid file", "error");
         return;

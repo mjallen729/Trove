@@ -1,5 +1,5 @@
-// Core schema types for vault file/folder structure
-export interface SchemaEntry {
+// Core manifest types for vault file/folder structure
+export interface ManifestEntry {
   id: string;
   name: string;
   type: "file" | "folder";
@@ -12,12 +12,12 @@ export interface SchemaEntry {
   created_at: string;
 }
 
-export type VaultSchema = SchemaEntry[];
+export type VaultManifest = ManifestEntry[];
 
 // Vault metadata from server
 export interface VaultRecord {
   uid: string;
-  schema_cipher: number[];
+  manifest_cipher: number[];
   created_at: string;
   burn_at: string | null;
   storage_used: number;
