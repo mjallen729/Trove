@@ -72,7 +72,7 @@ npm install -D @types/libsodium-wrappers
    - Salt: Fixed application-specific salt (e.g., `"trove-v1-salt-2024"`)
 
 3. **Key Expansion**: libsodium's `crypto_kdf_derive_from_key` (Blake2b-based) to derive multiple keys from master secret:
-   - `encryption_key`: 32 bytes for file/schema encryption (context: `"trove_ek"`, subkey_id: 1)
+   - `encryption_key`: 32 bytes for file/manifest encryption (context: `"trove_ek"`, subkey_id: 1)
    - `vault_uid`: SHA256 hash of a separate derivation (context: `"trove_id"`, subkey_id: 2)
    - Note: Using `crypto_kdf` instead of HKDF-SHA256 for simplicity; equally secure for this use case
 
@@ -89,7 +89,7 @@ npm install -D @types/libsodium-wrappers
 ### Chunk UID Derivation
 
 - Deterministic: `chunk_uid = SHA256(file_uid || chunk_index)`
-- No explicit chunk tracking needed in schema
+- No explicit chunk tracking needed in manifest
 - File UID generated as random UUID on upload start
 
 ---
@@ -106,15 +106,15 @@ npm install -D @types/libsodium-wrappers
 ### Folder Upload Support
 
 - Support drag-and-drop of entire folders
-- Preserve folder structure in schema
+- Preserve folder structure in manifest
 - Use `webkitdirectory` attribute and `DataTransferItem.webkitGetAsEntry()` for folder detection
 
-### Schema Structure
+### Manifest Structure
 
 Flat array with parent references (document store pattern):
 
 ```typescript
-interface SchemaEntry {
+interface ManifestEntry {
   id: string; // UUID
   name: string; // File/folder name (max 255 chars)
   type: "file" | "folder";
@@ -127,7 +127,7 @@ interface SchemaEntry {
   created_at: string; // ISO timestamp
 }
 
-type VaultSchema = SchemaEntry[];
+type VaultManifest = ManifestEntry[];
 ```
 
 ### Resumable Uploads
@@ -150,7 +150,7 @@ type VaultSchema = SchemaEntry[];
 -- Main vault storage
 CREATE TABLE vaults (
   uid TEXT PRIMARY KEY,           -- Hash derived from seed phrase
-  schema_cipher BYTEA NOT NULL,   -- Encrypted vault schema (nonce prepended)
+  manifest_cipher BYTEA NOT NULL, -- Encrypted vault manifest (nonce prepended)
   created_at TIMESTAMPTZ DEFAULT NOW(),
   burn_at TIMESTAMPTZ,            -- When to auto-delete (NULL = never)
   storage_used BIGINT DEFAULT 0,  -- Bytes used
@@ -287,7 +287,7 @@ CREATE POLICY "Uploads are accessible by vault_uid header"
 4. Client generates BIP39 seed phrase using `bip39.generateMnemonic()`
 5. Client derives `encryption_key` and `vault_uid` via Argon2id + crypto_kdf
 6. Client sends `vault_uid` and `burn_at` timestamp to server
-7. Server checks uniqueness, creates vault record with empty schema (`[]` encrypted)
+7. Server checks uniqueness, creates vault record with empty manifest (`[]` encrypted)
 8. Client displays seed words in grid for user to record
    - No clipboard copy button (security: forces users to write it down physically)
    - Words displayed in numbered grid matching input layout
@@ -299,8 +299,8 @@ CREATE POLICY "Uploads are accessible by vault_uid header"
 2. Client validates all words are in BIP39 wordlist
 3. Client derives `encryption_key` and `vault_uid`
 4. Client sends `vault_uid` to server via `x-vault-uid` header
-5. Server returns encrypted schema (or generic error if not found)
-6. Client decrypts schema, renders vault contents
+5. Server returns encrypted manifest (or generic error if not found)
+6. Client decrypts manifest, renders vault contents
 
 ### Burn Timer Options
 
@@ -337,14 +337,14 @@ CREATE POLICY "Uploads are accessible by vault_uid header"
    - Prepend nonce to ciphertext
    - Upload to `{vault_uid}/{chunk_uid}`
    - Update `received_chunks[]` on server
-     e. Update schema with new file entry
-     f. Encrypt and save updated schema
+     e. Update manifest with new file entry
+     f. Encrypt and save updated manifest
      g. Delete upload record (complete)
 
 ### Download Flow
 
 1. User selects file to download
-2. Client reads file entry from schema
+2. Client reads file entry from manifest
 3. For each chunk (0 to chunk_count-1):
    - Derive `chunk_uid = SHA256(file_uid || index)`
    - Download from `{vault_uid}/{chunk_uid}`
@@ -356,9 +356,9 @@ CREATE POLICY "Uploads are accessible by vault_uid header"
 
 1. User selects file/folder, confirms deletion (modal)
 2. If folder: recursively collect all descendant files
-3. Client removes entries from schema
+3. Client removes entries from manifest
 4. Client sends delete requests for all associated blobs
-5. Encrypt and save updated schema
+5. Encrypt and save updated manifest
 6. Update `storage_used` on vault record
 
 ---
@@ -498,10 +498,10 @@ client/src/
 │   ├── crypto.ts        # Encryption/decryption, key derivation
 │   ├── bip39.ts         # Seed phrase generation/validation
 │   ├── supabase.ts      # Supabase client setup
-│   ├── schema.ts        # Schema manipulation helpers
+│   ├── manifest.ts      # Manifest manipulation helpers
 │   └── chunks.ts        # File chunking utilities
 ├── context/             # React Context providers
-│   ├── VaultContext.tsx # Holds encryption key, schema, vault state
+│   ├── VaultContext.tsx # Holds encryption key, manifest, vault state
 │   └── ToastContext.tsx # Toast notification state
 ├── types/               # TypeScript types
 │   └── index.ts
@@ -514,7 +514,7 @@ client/src/
 
 ## Error Handling
 
-### Schema Corruption
+### Manifest Corruption
 
 - If decryption fails (wrong key or corrupted data):
   - Show "Unable to access vault" error

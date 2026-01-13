@@ -16,10 +16,10 @@
 - [.] Individual checkboxes on files do not work at all (but check all works fine)
 - [.] Uploaded two files of the same name, one overwrote the other.
 - [.] Storage used not updating!
-- [ ] Rename vault schema to vault manifest (its actual name), including in db cols ("manifest_cipher"), logs, code, etc.
+- [.] Rename vault schema to vault manifest (its actual name), including in db cols ("manifest_cipher"), logs, code, etc.
 - [ ] Double clicking a file downloads it (bad)
-- [ ] Ensure upload progress bar updates each time a chunk is uploaded
-- [ ] Uploads table in DB not working at all
+- [ ] Ensure upload progress bar updates each time a chunk is uploaded.
+- [ ] Uploads table in DB not working at all, investigate its functionality
 
 ## Features & Improvements
 

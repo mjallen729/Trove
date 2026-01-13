@@ -13,13 +13,13 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { UploadQueue } from "../components/UploadQueue";
 import { UploadDropzone } from "../components/UploadDropzone";
 import { IdleTimeoutModal } from "../components/IdleTimeoutModal";
-import type { SchemaEntry } from "../types/types";
+import type { ManifestEntry } from "../types/types";
 import {
   createFolder,
   addEntry,
   removeEntries,
   getUniqueName,
-} from "../utils/schema";
+} from "../utils/manifest";
 import { getChunkPath } from "../utils/chunks";
 import { STORAGE_BUCKET } from "../utils/supabase";
 import { deleteLogger } from "../utils/logger";
@@ -28,8 +28,8 @@ export function Vault() {
   const navigate = useNavigate();
   const {
     logout,
-    schema,
-    updateSchema,
+    manifest,
+    updateManifest,
     storageUsed,
     storageLimit,
     burnAt,
@@ -46,7 +46,7 @@ export function Vault() {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<SchemaEntry[] | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ManifestEntry[] | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Format bytes helper
@@ -78,16 +78,16 @@ export function Vault() {
     }
 
     const uniqueName = getUniqueName(
-      schema,
+      manifest,
       newFolderName.trim(),
       currentFolderId,
       true
     );
     const folder = createFolder(uniqueName, currentFolderId);
-    const newSchema = addEntry(schema, folder);
+    const newManifest = addEntry(manifest, folder);
 
     try {
-      await updateSchema(newSchema);
+      await updateManifest(newManifest);
       showToast(`Created folder "${uniqueName}"`, "success");
     } catch {
       showToast("Failed to create folder", "error");
@@ -95,16 +95,16 @@ export function Vault() {
 
     setNewFolderName("");
     setShowNewFolderInput(false);
-  }, [newFolderName, schema, currentFolderId, updateSchema, showToast]);
+  }, [newFolderName, manifest, currentFolderId, updateManifest, showToast]);
 
   const handleDownload = useCallback(
-    (file: SchemaEntry) => {
+    (file: ManifestEntry) => {
       downloadFile(file);
     },
     [downloadFile]
   );
 
-  const handleDelete = useCallback((entries: SchemaEntry[]) => {
+  const handleDelete = useCallback((entries: ManifestEntry[]) => {
     setDeleteTarget(entries);
   }, []);
 
@@ -121,12 +121,12 @@ export function Vault() {
 
     setIsDeleting(true);
     try {
-      const { schema: newSchema, removedFiles } = removeEntries(
-        schema,
+      const { manifest: newManifest, removedFiles } = removeEntries(
+        manifest,
         deleteTarget.map((e) => e.id)
       );
 
-      deleteLogger.log("Entries removed from schema:", {
+      deleteLogger.log("Entries removed from manifest:", {
         removedFileCount: removedFiles.length,
         removedFiles: removedFiles.map((f) => ({
           name: f.name,
@@ -165,7 +165,7 @@ export function Vault() {
         }
       }
 
-      await updateSchema(newSchema);
+      await updateManifest(newManifest);
 
       // Update storage used (subtract deleted file sizes)
       const deletedBytes = removedFiles.reduce((sum, f) => sum + (f.size || 0), 0);
@@ -191,7 +191,7 @@ export function Vault() {
       setIsDeleting(false);
       setDeleteTarget(null);
     }
-  }, [deleteTarget, schema, updateSchema, showToast, vaultUid, getClient, updateStorageUsed]);
+  }, [deleteTarget, manifest, updateManifest, showToast, vaultUid, getClient, updateStorageUsed]);
 
   const handleFilesDropped = useCallback(
     (files: File[]) => {
@@ -230,7 +230,7 @@ export function Vault() {
 
             {/* Breadcrumbs */}
             <FolderBreadcrumbs
-              schema={schema}
+              manifest={manifest}
               currentFolderId={currentFolderId}
               onNavigate={handleNavigate}
             />
@@ -387,7 +387,7 @@ export function Vault() {
       <UploadDropzone onFilesDropped={handleFilesDropped}>
         <main className="flex-1 px-6 py-4 min-h-[400px]">
           <FileList
-            schema={schema}
+            manifest={manifest}
             currentFolderId={currentFolderId}
             onNavigate={handleNavigate}
             onDownload={handleDownload}

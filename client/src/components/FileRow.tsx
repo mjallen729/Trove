@@ -1,7 +1,7 @@
-import type { SchemaEntry } from "../types/types";
+import type { ManifestEntry } from "../types/types";
 
 interface FileRowProps {
-  entry: SchemaEntry;
+  entry: ManifestEntry;
   isSelected: boolean;
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;

@@ -1,19 +1,19 @@
 import { useState, useCallback, useMemo } from "react";
-import type { SchemaEntry } from "../types/types";
+import type { ManifestEntry } from "../types/types";
 import { FileRow } from "./FileRow";
-import { getEntriesInFolder } from "../utils/schema";
+import { getEntriesInFolder } from "../utils/manifest";
 import { Button } from "./ui/Button";
 
 interface FileListProps {
-  schema: SchemaEntry[];
+  manifest: ManifestEntry[];
   currentFolderId: string | null;
   onNavigate: (folderId: string | null) => void;
-  onDownload: (file: SchemaEntry) => void;
-  onDelete: (entries: SchemaEntry[]) => void;
+  onDownload: (file: ManifestEntry) => void;
+  onDelete: (entries: ManifestEntry[]) => void;
 }
 
 export function FileList({
-  schema,
+  manifest,
   currentFolderId,
   onNavigate,
   onDownload,
@@ -26,12 +26,12 @@ export function FileList({
 
   // Get sorted entries for current folder
   const entries = useMemo(
-    () => getEntriesInFolder(schema, currentFolderId),
-    [schema, currentFolderId]
+    () => getEntriesInFolder(manifest, currentFolderId),
+    [manifest, currentFolderId]
   );
 
   const handleSelect = useCallback(
-    (entry: SchemaEntry, index: number, event: React.MouseEvent) => {
+    (entry: ManifestEntry, index: number, event: React.MouseEvent) => {
       const newSelected = new Set(selectedIds);
 
       if (event.shiftKey && lastSelectedIndex !== null) {
@@ -61,7 +61,7 @@ export function FileList({
   );
 
   const handleToggle = useCallback(
-    (entry: SchemaEntry, index: number) => {
+    (entry: ManifestEntry, index: number) => {
       const newSelected = new Set(selectedIds);
       if (newSelected.has(entry.id)) {
         newSelected.delete(entry.id);
@@ -75,7 +75,7 @@ export function FileList({
   );
 
   const handleDoubleClick = useCallback(
-    (entry: SchemaEntry) => {
+    (entry: ManifestEntry) => {
       if (entry.type === "folder") {
         onNavigate(entry.id);
         setSelectedIds(new Set());

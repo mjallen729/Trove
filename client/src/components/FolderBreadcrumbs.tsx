@@ -1,21 +1,21 @@
 import { useMemo } from "react";
-import type { SchemaEntry } from "../types/types";
-import { getBreadcrumbPath } from "../utils/schema";
+import type { ManifestEntry } from "../types/types";
+import { getBreadcrumbPath } from "../utils/manifest";
 
 interface FolderBreadcrumbsProps {
-  schema: SchemaEntry[];
+  manifest: ManifestEntry[];
   currentFolderId: string | null;
   onNavigate: (folderId: string | null) => void;
 }
 
 export function FolderBreadcrumbs({
-  schema,
+  manifest,
   currentFolderId,
   onNavigate,
 }: FolderBreadcrumbsProps) {
   const breadcrumbs = useMemo(
-    () => getBreadcrumbPath(schema, currentFolderId),
-    [schema, currentFolderId]
+    () => getBreadcrumbPath(manifest, currentFolderId),
+    [manifest, currentFolderId]
   );
 
   return (

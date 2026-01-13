@@ -4,7 +4,7 @@
 -- Main vault storage
 CREATE TABLE IF NOT EXISTS vaults (
   uid TEXT PRIMARY KEY,                    -- Hash derived from seed phrase
-  schema_cipher BYTEA NOT NULL,            -- Encrypted vault schema (nonce prepended)
+  manifest_cipher BYTEA NOT NULL,          -- Encrypted vault manifest (nonce prepended)
   created_at TIMESTAMPTZ DEFAULT NOW(),
   burn_at TIMESTAMPTZ,                     -- When to auto-delete (NULL = never)
   storage_used BIGINT DEFAULT 0,           -- Bytes used

@@ -11,7 +11,7 @@ export async function getSodium(): Promise<typeof _sodium> {
   return sodiumReady;
 }
 
-// Argon2id parameters (light for ~100ms derivation)
+// Argon2id parameters (OWASP Spec)
 const ARGON2_MEMORY_KB = 25 * 1000;  // 25 MB (OWASP min: 19MB)
 const ARGON2_ITERATIONS = 2;  // OWASP min: 2
 const FIXED_SALT = "trove-v1-salt-2026";

@@ -114,7 +114,7 @@ ALTER TABLE "public"."uploads" OWNER TO "postgres";
 
 CREATE TABLE IF NOT EXISTS "public"."vaults" (
     "uid" "text" NOT NULL,
-    "schema_cipher" "bytea" NOT NULL,
+    "manifest_cipher" "bytea" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"(),
     "burn_at" timestamp with time zone,
     "storage_used" bigint DEFAULT 0,
