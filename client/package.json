@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@noble/hashes": "^2.0.1",
     "@supabase/supabase-js": "^2.90.1",
     "@tailwindcss/vite": "^4.1.18",
     "bip39": "^3.1.0",

@@ -1,4 +1,4 @@
-Security Practices for Generating a Plaintext Vault Identifier (VaultUID)
+Security practices for generating a public vault identifier (VaultUID) from a plaintext seed phrase
 
 ┌─────────────────────────────────────────────────────────────────────┐
 │  SEED PHRASE (plaintext)                                            │
@@ -43,8 +43,8 @@ Security Practices for Generating a Plaintext Vault Identifier (VaultUID)
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  BLAKE2B HASH (Additional Separation)                               │
-│  sodium.crypto_generichash(32, derivedKey)                          │
+│  SHA3-256 HASH (Algorithm Diversity)                                │
+│  sha3_256(derivedKey)                                               │
 │                                                                     │
 │  Output: hash (32 bytes)                                            │
 └───────────────────────────────┬─────────────────────────────────────┘
@@ -68,7 +68,7 @@ Summary:
 ├──────┼──────────────┼──────────────────────────────────────────────┤
 │ 3    │ Blake2b KDF  │ Derive separate key for vault ID (subkey 2)  │
 ├──────┼──────────────┼──────────────────────────────────────────────┤
-│ 4    │ Blake2b Hash │ Extra separation from master secret          │
+│ 4    │ SHA3-256     │ Algorithm diversity (defense-in-depth)        │
 ├──────┼──────────────┼──────────────────────────────────────────────┤
 │ 5    │ Hex encode   │ Convert to 64-char string for DB primary key │
 └──────┴──────────────┴──────────────────────────────────────────────┘

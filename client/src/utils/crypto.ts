@@ -1,4 +1,5 @@
 import _sodium from "libsodium-wrappers-sumo";
+import { sha3_256 } from "@noble/hashes/sha3.js";
 import { cryptoLogger } from "./logger";
 
 // Singleton initialization pattern for libsodium WASM
@@ -87,8 +88,8 @@ export async function deriveVaultUid(
     masterSecret
   );
 
-  // Hash the derived key for additional separation
-  const hash = sodium.crypto_generichash(32, derivedKey);
+  // Hash the derived key with SHA3-256 for algorithm diversity (defense-in-depth)
+  const hash = sha3_256(derivedKey);
 
   // Clean up intermediate key
   sodium.memzero(derivedKey);
