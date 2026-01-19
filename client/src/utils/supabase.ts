@@ -38,10 +38,25 @@ const vaultClientCache = new Map<string, SupabaseClient>();
  * Clients are cached by vaultUid to avoid multiple GoTrueClient instances
  *
  * @param vaultUid The derived vault UID (hash of master secret derivation)
+ * @param sessionToken Optional session token for storage access (raw token, not hash)
  */
-export function createVaultClient(vaultUid: string): SupabaseClient {
-  const cached = vaultClientCache.get(vaultUid);
+export function createVaultClient(
+  vaultUid: string,
+  sessionToken?: string
+): SupabaseClient {
+  // Cache key includes token presence to allow updating client with token
+  const cacheKey = sessionToken ? `${vaultUid}:${sessionToken}` : vaultUid;
+  const cached = vaultClientCache.get(cacheKey);
   if (cached) return cached;
+
+  const headers: Record<string, string> = {
+    "x-vault-uid": vaultUid,
+  };
+
+  // Add session token header if provided (required for storage operations)
+  if (sessionToken) {
+    headers["x-vault-token"] = sessionToken;
+  }
 
   const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
@@ -51,13 +66,11 @@ export function createVaultClient(vaultUid: string): SupabaseClient {
       storageKey: `trove-vault-${vaultUid.slice(0, 8)}`, // Unique key per vault
     },
     global: {
-      headers: {
-        "x-vault-uid": vaultUid,
-      },
+      headers,
     },
   });
 
-  vaultClientCache.set(vaultUid, client);
+  vaultClientCache.set(cacheKey, client);
   return client;
 }
 
@@ -81,4 +94,10 @@ export const TABLES = {
   VAULTS: "vaults",
   UPLOADS: "uploads",
   STORAGE_TRANSACTS: "storage_transacts",
+  VAULT_SESSIONS: "vault_sessions",
 } as const;
+
+/**
+ * Session token TTL in milliseconds (1 hour)
+ */
+export const SESSION_TOKEN_TTL_MS = 60 * 60 * 1000;

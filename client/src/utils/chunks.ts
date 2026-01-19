@@ -50,10 +50,10 @@ export async function decryptChunk(
 export async function getChunkPath(
   vaultUid: string,
   fileUid: string,
-  chunkPathPepper: string,
+  manifestKey: string,
   chunkIndex: number
 ): Promise<string> {
-  const chunkUid = await deriveChunkUid(fileUid, chunkPathPepper, chunkIndex);
+  const chunkUid = await deriveChunkUid(fileUid, manifestKey, chunkIndex);
   return `${vaultUid}/${chunkUid}`;
 }
 

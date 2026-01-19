@@ -1,5 +1,6 @@
 import _sodium from "libsodium-wrappers-sumo";
 import { sha3_256 } from "@noble/hashes/sha3.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { cryptoLogger } from "./logger";
 
 // Singleton initialization pattern for libsodium WASM
@@ -214,18 +215,18 @@ export async function decryptToString(
 }
 
 /**
- * Derive deterministic chunk UID from file UID, pepper, and chunk index
- * chunk_uid = BLAKE2b(file_uid || ":" || chunk_path_pepper || ":" || chunk_index)
+ * Derive deterministic chunk UID from file UID, manifest key, and chunk index
+ * chunk_uid = BLAKE2b(file_uid || ":" || manifest_key || ":" || chunk_index)
  */
 export async function deriveChunkUid(
   fileUid: string,
-  chunkPathPepper: string,
+  manifestKey: string,
   chunkIndex: number
 ): Promise<string> {
   const sodium = await getSodium();
 
   const input = sodium.from_string(
-    `${fileUid}:${chunkPathPepper}:${chunkIndex}`
+    `${fileUid}:${manifestKey}:${chunkIndex}`
   );
   const hash = sodium.crypto_generichash(32, input);
 
@@ -270,4 +271,25 @@ export async function toHex(data: Uint8Array): Promise<string> {
 export async function fromHex(hex: string): Promise<Uint8Array> {
   const sodium = await getSodium();
   return sodium.from_hex(hex);
+}
+
+/**
+ * Generate a random session token (32 bytes, returned as hex)
+ * Used for vault session authentication
+ */
+export async function generateSessionToken(): Promise<string> {
+  const sodium = await getSodium();
+  const tokenBytes = sodium.randombytes_buf(32);
+  return sodium.to_hex(tokenBytes);
+}
+
+/**
+ * Hash a session token using SHA-256 for storage
+ * The hash is stored server-side, the raw token stays client-side
+ */
+export async function hashSessionToken(token: string): Promise<string> {
+  const sodium = await getSodium();
+  const tokenBytes = sodium.from_hex(token);
+  const hash = sha256(tokenBytes);
+  return sodium.to_hex(hash);
 }

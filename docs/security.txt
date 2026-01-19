@@ -68,7 +68,7 @@ Summary:
 ├──────┼──────────────┼──────────────────────────────────────────────┤
 │ 3    │ Blake2b KDF  │ Derive separate key for vault ID (subkey 2)  │
 ├──────┼──────────────┼──────────────────────────────────────────────┤
-│ 4    │ SHA3-256     │ Algorithm diversity (defense-in-depth)        │
+│ 4    │ SHA3-256     │ Algorithm diversity (defense-in-depth)       │
 ├──────┼──────────────┼──────────────────────────────────────────────┤
 │ 5    │ Hex encode   │ Convert to 64-char string for DB primary key │
 └──────┴──────────────┴──────────────────────────────────────────────┘
@@ -76,7 +76,7 @@ Parallel derivation for encryption key:
 
 masterSecret ──┬── KDF(subkey=1, ctx="trove_ek") ──► encryptionKey (stays client-side)
                │
-               └── KDF(subkey=2, ctx="trove_id") ──► hash ──► vaultUid (sent to server)
+               └── KDF(subkey=2, ctx="trove_id") ──► sha3_hash ──► vaultUid (sent to server)
 
 The encryption key and vault UID are derived from the same master secret but with different subkey IDs, so knowing one doesn't reveal the other.
 

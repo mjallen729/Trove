@@ -13,6 +13,7 @@ import {
   clearVaultClient,
   supabaseBase,
   TABLES,
+  SESSION_TOKEN_TTL_MS,
 } from "../utils/supabase";
 import {
   deriveKeys,
@@ -20,6 +21,8 @@ import {
   decrypt,
   secureWipe,
   generateFileUid,
+  generateSessionToken,
+  hashSessionToken,
 } from "../utils/crypto";
 import { vaultLogger } from "../utils/logger";
 import {
@@ -85,7 +88,7 @@ const initialState: VaultState = {
   isLoading: false,
   error: null,
   vaultUid: null,
-  manifest: { chunk_path_pepper: "", entries: [] },
+  manifest: { manifest_key: "", entries: [] },
   storageUsed: 0,
   storageLimit: 5368709120, // 5GB
   burnAt: null,
@@ -138,7 +141,7 @@ interface VaultContextValue extends VaultState {
   clearError: () => void;
   getClient: () => SupabaseClient | null;
   getEncryptionKey: () => Uint8Array | null;
-  getChunkPathPepper: () => string | null;
+  getManifestKey: () => string | null;
 }
 
 const VaultContext = createContext<VaultContextValue | null>(null);
@@ -175,6 +178,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   // These are closure variables, providing slight memory protection
   const encryptionKeyRef = useRef<Uint8Array | null>(null);
   const vaultClientRef = useRef<SupabaseClient | null>(null);
+  const sessionTokenRef = useRef<string | null>(null);
+  const sessionRefreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Manifest ref for atomic updates (avoids race conditions)
   const manifestRef = useRef<VaultManifest>(state.manifest);
@@ -191,10 +196,151 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const getEncryptionKey = useCallback(() => encryptionKeyRef.current, []);
   const getClient = useCallback(() => vaultClientRef.current, []);
-  const getChunkPathPepper = useCallback(
-    () => (state.isUnlocked ? state.manifest.chunk_path_pepper : null),
-    [state.isUnlocked, state.manifest.chunk_path_pepper]
+  const getManifestKey = useCallback(
+    () => (state.isUnlocked ? state.manifest.manifest_key : null),
+    [state.isUnlocked, state.manifest.manifest_key]
   );
+
+  /**
+   * Create a new session token and store it server-side
+   * Returns the raw token for client use
+   */
+  const createSession = useCallback(
+    async (vaultUid: string, client: SupabaseClient): Promise<string> => {
+      // Generate random token
+      const token = await generateSessionToken();
+      const tokenHash = await hashSessionToken(token);
+
+      // Calculate expiry (1 hour from now)
+      const expiresAt = new Date(Date.now() + SESSION_TOKEN_TTL_MS).toISOString();
+
+      // Store hash in database
+      const { error } = await client.from(TABLES.VAULT_SESSIONS).insert({
+        vault_uid: vaultUid,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+      });
+
+      if (error) {
+        vaultLogger.error("Failed to create session:", {
+          code: error.code,
+          message: error.message,
+        });
+        throw new Error("Failed to create session");
+      }
+
+      vaultLogger.log("Session created, expires:", expiresAt);
+      return token;
+    },
+    []
+  );
+
+  /**
+   * Refresh session by creating a new token and deleting the old one
+   */
+  const refreshSession = useCallback(async (): Promise<void> => {
+    const vaultUid = state.vaultUid;
+    const oldToken = sessionTokenRef.current;
+
+    if (!vaultUid || !oldToken) {
+      return;
+    }
+
+    try {
+      // Create a temporary client with the old token for the delete operation
+      const tempClient = createVaultClient(vaultUid, oldToken);
+
+      // Generate new token
+      const newToken = await generateSessionToken();
+      const newTokenHash = await hashSessionToken(newToken);
+      const expiresAt = new Date(Date.now() + SESSION_TOKEN_TTL_MS).toISOString();
+
+      // Insert new session
+      const { error: insertError } = await tempClient
+        .from(TABLES.VAULT_SESSIONS)
+        .insert({
+          vault_uid: vaultUid,
+          token_hash: newTokenHash,
+          expires_at: expiresAt,
+        });
+
+      if (insertError) {
+        vaultLogger.error("Failed to refresh session:", insertError);
+        return;
+      }
+
+      // Delete old session
+      const oldTokenHash = await hashSessionToken(oldToken);
+      await tempClient
+        .from(TABLES.VAULT_SESSIONS)
+        .delete()
+        .eq("token_hash", oldTokenHash);
+
+      // Update refs with new token and client
+      sessionTokenRef.current = newToken;
+      vaultClientRef.current = createVaultClient(vaultUid, newToken);
+
+      vaultLogger.log("Session refreshed, new expiry:", expiresAt);
+    } catch (err) {
+      vaultLogger.error("Session refresh error:", err);
+    }
+  }, [state.vaultUid]);
+
+  /**
+   * Delete the current session from server
+   */
+  const deleteSession = useCallback(async (): Promise<void> => {
+    const token = sessionTokenRef.current;
+    const vaultUid = state.vaultUid;
+
+    if (!token || !vaultUid) {
+      return;
+    }
+
+    try {
+      const tokenHash = await hashSessionToken(token);
+      const client = createVaultClient(vaultUid, token);
+
+      await client
+        .from(TABLES.VAULT_SESSIONS)
+        .delete()
+        .eq("token_hash", tokenHash);
+
+      vaultLogger.log("Session deleted");
+    } catch (err) {
+      vaultLogger.error("Failed to delete session:", err);
+    }
+
+    sessionTokenRef.current = null;
+  }, [state.vaultUid]);
+
+  /**
+   * Start periodic session refresh (every 30 minutes for 1 hour TTL)
+   */
+  const startSessionRefresh = useCallback(() => {
+    // Clear any existing interval
+    if (sessionRefreshIntervalRef.current) {
+      clearInterval(sessionRefreshIntervalRef.current);
+    }
+
+    // Refresh at half the TTL to ensure we never expire
+    const refreshInterval = SESSION_TOKEN_TTL_MS / 2;
+    sessionRefreshIntervalRef.current = setInterval(() => {
+      refreshSession();
+    }, refreshInterval);
+
+    vaultLogger.log("Session refresh scheduled every", refreshInterval / 60000, "minutes");
+  }, [refreshSession]);
+
+  /**
+   * Stop periodic session refresh
+   */
+  const stopSessionRefresh = useCallback(() => {
+    if (sessionRefreshIntervalRef.current) {
+      clearInterval(sessionRefreshIntervalRef.current);
+      sessionRefreshIntervalRef.current = null;
+    }
+  }, []);
 
   const clearError = useCallback(() => {
     dispatch({ type: "CLEAR_ERROR" });
@@ -202,6 +348,13 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     vaultLogger.log("Logging out...");
+
+    // Stop session refresh
+    stopSessionRefresh();
+
+    // Delete session from server
+    await deleteSession();
+
     // Clear cached Supabase client
     if (state.vaultUid) {
       clearVaultClient(state.vaultUid);
@@ -212,9 +365,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       encryptionKeyRef.current = null;
     }
     vaultClientRef.current = null;
+    sessionTokenRef.current = null;
     dispatch({ type: "LOGOUT" });
-    vaultLogger.log("Logged out, keys wiped");
-  }, [state.vaultUid]);
+    vaultLogger.log("Logged out, keys wiped, session deleted");
+  }, [state.vaultUid, stopSessionRefresh, deleteSession]);
 
   const createVault = useCallback(
     async (
@@ -230,9 +384,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         // Calculate burn_at timestamp
         const burnAt = calculateBurnAt(burnTimer);
 
-        // Encrypt empty manifest with fresh chunk_path_pepper
+        // Encrypt empty manifest with fresh manifest_key
         const emptyManifest: VaultManifest = {
-          chunk_path_pepper: generateFileUid(),
+          manifest_key: generateFileUid(),
           entries: [],
         };
         const manifestJson = JSON.stringify(emptyManifest);
@@ -291,9 +445,19 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           );
         }
 
-        // Store keys in refs
+        // Create initial client (without token) for session creation
+        const initialClient = createVaultClient(vaultUid);
+
+        // Create session token for storage access
+        const sessionToken = await createSession(vaultUid, initialClient);
+
+        // Store keys and create final client with token
         encryptionKeyRef.current = encryptionKey;
-        vaultClientRef.current = createVaultClient(vaultUid);
+        sessionTokenRef.current = sessionToken;
+        vaultClientRef.current = createVaultClient(vaultUid, sessionToken);
+
+        // Start session refresh timer
+        startSessionRefresh();
 
         dispatch({
           type: "UNLOCK_SUCCESS",
@@ -314,7 +478,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    []
+    [createSession, startSessionRefresh]
   );
 
   const unlockVault = useCallback(
@@ -423,9 +587,16 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // Store keys in refs
+        // Create session token for storage access
+        const sessionToken = await createSession(vaultUid, client);
+
+        // Store keys and create final client with token
         encryptionKeyRef.current = encryptionKey;
-        vaultClientRef.current = client;
+        sessionTokenRef.current = sessionToken;
+        vaultClientRef.current = createVaultClient(vaultUid, sessionToken);
+
+        // Start session refresh timer
+        startSessionRefresh();
 
         dispatch({
           type: "UNLOCK_SUCCESS",
@@ -447,7 +618,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    []
+    [createSession, startSessionRefresh]
   );
 
   const updateManifest = useCallback(
@@ -555,7 +726,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     clearError,
     getClient,
     getEncryptionKey,
-    getChunkPathPepper,
+    getManifestKey,
   };
 
   return (

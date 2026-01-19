@@ -29,7 +29,7 @@ export function useUpload(): UseUploadReturn {
   const {
     getClient,
     getEncryptionKey,
-    getChunkPathPepper,
+    getManifestKey,
     vaultUid,
     updateManifest,
     updateStorageUsed,
@@ -47,8 +47,8 @@ export function useUpload(): UseUploadReturn {
     const client = getClient();
     const encryptionKey = getEncryptionKey();
 
-    const chunkPathPepper = getChunkPathPepper();
-    if (!client || !encryptionKey || !vaultUid || !chunkPathPepper) return;
+    const manifestKey = getManifestKey();
+    if (!client || !encryptionKey || !vaultUid || !manifestKey) return;
 
     // Read from ref to get latest state (avoids stale closure)
     const currentQueue = uploadQueueRef.current;
@@ -78,9 +78,9 @@ export function useUpload(): UseUploadReturn {
     // Start uploads (don't await)
     toStart.forEach((item) => {
       activeUploadsRef.current++;
-      uploadFile(item, client, encryptionKey, chunkPathPepper);
+      uploadFile(item, client, encryptionKey, manifestKey);
     });
-  }, [getClient, getEncryptionKey, getChunkPathPepper, vaultUid]);
+  }, [getClient, getEncryptionKey, getManifestKey, vaultUid]);
 
   // Effect to process queue
   useEffect(() => {
@@ -91,7 +91,7 @@ export function useUpload(): UseUploadReturn {
     item: UploadItem,
     client: NonNullable<ReturnType<typeof getClient>>,
     encryptionKey: Uint8Array,
-    chunkPathPepper: string
+    manifestKey: string
   ) => {
     const { file, file_uid, totalChunks, parentId } = item;
 
@@ -149,7 +149,7 @@ export function useUpload(): UseUploadReturn {
               const path = await getChunkPath(
                 vaultUid!,
                 file_uid,
-                chunkPathPepper,
+                manifestKey,
                 chunkIndex
               );
 

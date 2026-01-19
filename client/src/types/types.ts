@@ -13,7 +13,7 @@ export interface ManifestEntry {
 }
 
 export interface VaultManifest {
-  chunk_path_pepper: string;
+  manifest_key: string;
   entries: ManifestEntry[];
 }
 

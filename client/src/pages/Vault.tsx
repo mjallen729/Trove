@@ -39,7 +39,7 @@ export function Vault() {
     burnAt,
     vaultUid,
     getClient,
-    getChunkPathPepper,
+    getManifestKey,
     updateStorageUsed,
   } = useVault();
   const { showToast } = useToast();
@@ -119,8 +119,8 @@ export function Vault() {
     if (!deleteTarget || !vaultUid) return;
 
     const client = getClient();
-    const chunkPathPepper = getChunkPathPepper();
-    if (!client || !chunkPathPepper) return;
+    const manifestKey = getManifestKey();
+    if (!client || !manifestKey) return;
 
     deleteLogger.log("Starting delete:", {
       targetCount: deleteTarget.length,
@@ -155,7 +155,7 @@ export function Vault() {
             const path = await getChunkPath(
               vaultUid,
               file.file_uid,
-              chunkPathPepper,
+              manifestKey,
               i
             );
             chunkPaths.push(path);
@@ -218,7 +218,7 @@ export function Vault() {
     showToast,
     vaultUid,
     getClient,
-    getChunkPathPepper,
+    getManifestKey,
     updateStorageUsed,
   ]);
 
