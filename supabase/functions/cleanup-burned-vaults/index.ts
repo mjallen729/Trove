@@ -23,17 +23,16 @@ Deno.serve(async (req) => {
     // Verify this is an authorized request (from pg_cron or with service key)
     const authHeader = req.headers.get("authorization");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const isInternalCall = req.headers.get("x-supabase-internal") === "true";
 
-    // Only allow service role key or internal pg_cron calls
-    if (!authHeader?.includes(serviceRoleKey ?? "")) {
-      // Check if this is an internal call (e.g., from pg_cron via pg_net)
-      const isInternalCall = req.headers.get("x-supabase-internal") === "true";
-      if (!isInternalCall && !authHeader) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    const hasValidServiceKey =
+      !!serviceRoleKey && !!authHeader && authHeader.includes(serviceRoleKey);
+
+    if (!hasValidServiceKey && !isInternalCall) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

@@ -23,6 +23,7 @@ dist-ssr
 scratch/
 .claude/
 *.local
+supabase/.temp/
 
 # Logs
 logs
