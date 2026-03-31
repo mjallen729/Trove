@@ -33,7 +33,7 @@ Security practices for generating a public vault identifier from a plaintext see
 │  ┌─────────────────────────────────────────────────────────────┐    │
 │  │  Input:                                                     │    │
 │  │    • master key: masterSecret                               │    │
-│  │    • subkey_id: 2  (1 = encryption key, 2 = vault ID)       │    │
+│  │    • subkey_id: 2  (1 = vault encryption key, 2 = vault ID) │    │
 │  │    • context: "trove_id" (8 bytes)                          │    │
 │  │    • output length: 32 bytes                                │    │
 │  └─────────────────────────────────────────────────────────────┘    │
