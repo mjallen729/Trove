@@ -1,4 +1,4 @@
-Security practices for generating a public vault identifier (VaultUID) from a plaintext seed phrase
+Security practices for generating a public vault identifier from a plaintext seed phrase
 
 ┌─────────────────────────────────────────────────────────────────────┐
 │  SEED PHRASE (plaintext)                                            │

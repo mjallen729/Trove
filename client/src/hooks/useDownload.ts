@@ -18,8 +18,7 @@ interface UseDownloadReturn {
 }
 
 export function useDownload(): UseDownloadReturn {
-  const { getClient, getEncryptionKey, getManifestKey, vaultUid } =
-    useVault();
+  const { getClient, getEncryptionKey, getManifestKey, vaultUid } = useVault();
   const { showToast } = useToast();
   const [downloads, setDownloads] = useState<DownloadProgress[]>([]);
 

@@ -225,9 +225,7 @@ export async function deriveChunkUid(
 ): Promise<string> {
   const sodium = await getSodium();
 
-  const input = sodium.from_string(
-    `${fileUid}:${manifestKey}:${chunkIndex}`
-  );
+  const input = sodium.from_string(`${fileUid}:${manifestKey}:${chunkIndex}`);
   const hash = sodium.crypto_generichash(32, input);
 
   return sodium.to_hex(hash);

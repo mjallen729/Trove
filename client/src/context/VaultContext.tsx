@@ -179,7 +179,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const encryptionKeyRef = useRef<Uint8Array | null>(null);
   const vaultClientRef = useRef<SupabaseClient | null>(null);
   const sessionTokenRef = useRef<string | null>(null);
-  const sessionRefreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionRefreshIntervalRef = useRef<ReturnType<
+    typeof setInterval
+  > | null>(null);
 
   // Manifest ref for atomic updates (avoids race conditions)
   const manifestRef = useRef<VaultManifest>(state.manifest);
@@ -212,7 +214,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       const tokenHash = await hashSessionToken(token);
 
       // Calculate expiry (1 hour from now)
-      const expiresAt = new Date(Date.now() + SESSION_TOKEN_TTL_MS).toISOString();
+      const expiresAt = new Date(
+        Date.now() + SESSION_TOKEN_TTL_MS
+      ).toISOString();
 
       // Store hash in database
       const { error } = await client.from(TABLES.VAULT_SESSIONS).insert({
@@ -253,7 +257,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       // Generate new token
       const newToken = await generateSessionToken();
       const newTokenHash = await hashSessionToken(newToken);
-      const expiresAt = new Date(Date.now() + SESSION_TOKEN_TTL_MS).toISOString();
+      const expiresAt = new Date(
+        Date.now() + SESSION_TOKEN_TTL_MS
+      ).toISOString();
 
       // Insert new session
       const { error: insertError } = await tempClient
@@ -329,7 +335,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       refreshSession();
     }, refreshInterval);
 
-    vaultLogger.log("Session refresh scheduled every", refreshInterval / 60000, "minutes");
+    vaultLogger.log(
+      "Session refresh scheduled every",
+      refreshInterval / 60000,
+      "minutes"
+    );
   }, [refreshSession]);
 
   /**
