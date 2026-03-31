@@ -1,4 +1,4 @@
-## Security Vulnerabilities
+## Security
 
 - [.] Remove console logging of any vault credentials when not in dev (testing)
 - [ ] Enable RLS for postgres
@@ -11,7 +11,7 @@
   - Instead, the manifest should reference the files via uid in the db -->
 - [.] For deriving file chunks names in storage, instead of hash(fileUid:chunkIndex) it should be hash(fileUid_Manifest.id:chunkIndex). The Manifest.id is located inside of the encrypted manifest so only the client can access it, therefore no one can derive the file storage name from the file_uid except the client.
 
-## Bugs
+## Bug
 
 - [.] Multiple GoTrueClient warning on the console
 - [.] Individual checkboxes on files do not work at all (but check all works fine)
@@ -24,7 +24,7 @@
 - [.] Arrow is facing wrong direction each state in upload queue component
 - [ ] Uploads table in DB not working at all, investigate its functionality
 
-## Features & Improvements
+## Feature
 
 - [.] Custom logger that logs console only if not in dev environment (meta.env.DEV), wrapper class. Migrate all logs
 - [ ] Resume upload does not work (upload queue component should display incomplete uploads upon login with a resume button which prompts user to reupload the file)
@@ -41,7 +41,7 @@
 - [ ] Change `modified` column in vault to `uploaded`
 - [ ] Burn info in the header (orange) should be displayed to the left of current storage
 
-## Quality Control
+## QA
 
 - [.] vault creation
 - [.] vault login
