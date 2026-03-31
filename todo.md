@@ -30,12 +30,12 @@
 - [ ] Resume upload does not work (upload queue component should display incomplete uploads upon login with a resume button which prompts user to reupload the file)
   - If a user clicks the x button electing not to resume the upload, all the file chunks should be removed from storage; currently they stay. Maybe `received_chunks` can be improved, right now it is an array of numbers.
 - [ ] Feature: buy more storage via Stripe
-  - Mandatory: it's ok if the purchase itself isnt anonymous (Stripe & credit card) but under no circumstancecs can we allow the user to be traced to any transaction or vault
+  - It's ok if the purchase itself isnt anonymous (Stripe & credit card) but under no circumstancecs can we allow a user to be traced to any storage transaction or vault
   - Remove created_at field from storage_transacts db, as it can be used for correlation attacks
   - How else can we maximize privacy?
   - We need to also design the pricing model
-- [ ] Include JS Doc file headers in every file including module and description tags
-- [ ] Drag and drop for file/folder reorganization
+- [ ] Include JS Doc file headers in every file; include module and description tags
+- [ ] Drag and drop for file/folder reorganization within vault
 - [ ] Display time in burn countdown in header
 - [ ] Remove created_at from file schema entries
 - [ ] Change `modified` column in vault to `uploaded`
@@ -52,5 +52,6 @@
 - [.] large file upload (chunked)
 - [ ] large file download (chunked)
 - [.] large file delete
+- [ ] verify vault burn after specified time
 - [ ] Final prettier
 - [ ] Final eslint
