@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 import { VaultProvider } from "./context/VaultContext";
 import { ToastProvider } from "./context/ToastContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -10,6 +11,7 @@ import { Vault } from "./pages/Vault";
 function App() {
   return (
     <BrowserRouter>
+      <Analytics />
       <VaultProvider>
         <ToastProvider>
           <Routes>
