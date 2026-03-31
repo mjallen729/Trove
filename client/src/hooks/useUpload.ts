@@ -80,11 +80,13 @@ export function useUpload(): UseUploadReturn {
       activeUploadsRef.current++;
       uploadFile(item, client, encryptionKey, manifestKey);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getClient, getEncryptionKey, getManifestKey, vaultUid]);
 
   // Effect to process queue
   useEffect(() => {
     processQueue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadQueue.length]);
 
   const uploadFile = async (

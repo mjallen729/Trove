@@ -10,8 +10,8 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   createVaultClient,
+  createInviteClient,
   clearVaultClient,
-  supabaseBase,
   TABLES,
   SESSION_TOKEN_TTL_MS,
 } from "../utils/supabase";
@@ -129,7 +129,8 @@ interface VaultContextValue extends VaultState {
   unlockVault: (seedPhrase: string) => Promise<boolean>;
   createVault: (
     seedPhrase: string,
-    burnTimer: BurnTimerOption
+    burnTimer: BurnTimerOption,
+    inviteCode: string
   ) => Promise<boolean>;
   logout: () => Promise<void>;
   updateManifest: (
@@ -194,6 +195,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   // Sync storage ref when vault is unlocked (external state change)
   useEffect(() => {
     storageUsedRef.current = state.storageUsed;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.vaultUid]); // Only sync when vault changes, not on every storage update
 
   const getEncryptionKey = useCallback(() => encryptionKeyRef.current, []);
@@ -383,7 +385,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const createVault = useCallback(
     async (
       seedPhrase: string,
-      burnTimer: BurnTimerOption
+      burnTimer: BurnTimerOption,
+      inviteCode: string
     ): Promise<boolean> => {
       dispatch({ type: "UNLOCK_START" });
 
@@ -403,8 +406,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         const manifestBytes = new TextEncoder().encode(manifestJson);
         const manifestCipher = await encrypt(manifestBytes, encryptionKey);
 
-        // Create vault record (using base client, no header needed for insert)
-        const { error } = await supabaseBase.from(TABLES.VAULTS).insert({
+        // Create vault record (invite code required for insert)
+        const inviteClient = createInviteClient(inviteCode);
+        const { error } = await inviteClient.from(TABLES.VAULTS).insert({
           uid: vaultUid,
           manifest_cipher: bytesToHex(manifestCipher),
           burn_at: burnAt,
@@ -421,6 +425,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           if (error.code === "23505") {
             throw new Error("A vault with this seed phrase already exists");
           }
+          if (error.code === "42501") {
+            throw new Error("Invalid invite code");
+          }
           throw error;
         }
 
@@ -430,8 +437,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           storageLimit: FREE_STORAGE_BYTES,
         });
 
-        // Create free storage transaction
-        const { error: transactError } = await supabaseBase
+        // Create free storage transaction (using vault client for x-vault-uid header)
+        const vaultClient = createVaultClient(vaultUid);
+        const { error: transactError } = await vaultClient
           .from(TABLES.STORAGE_TRANSACTS)
           .insert({
             transaction_uid: `free-${vaultUid.slice(0, 16)}`,
@@ -744,6 +752,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useVault() {
   const context = useContext(VaultContext);
   if (!context) {

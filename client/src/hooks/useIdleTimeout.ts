@@ -12,7 +12,7 @@ export function useIdleTimeout(): UseIdleTimeoutReturn {
   const { logout, isUnlocked } = useVault();
   const [showWarning, setShowWarning] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
-  const lastActivityRef = useRef(Date.now());
+  const lastActivityRef = useRef(0);
   const timerRef = useRef<number | null>(null);
 
   const resetTimer = useCallback(() => {
@@ -27,6 +27,11 @@ export function useIdleTimeout(): UseIdleTimeoutReturn {
 
   useEffect(() => {
     if (!isUnlocked) return;
+
+    // Initialize on first activation
+    if (lastActivityRef.current === 0) {
+      lastActivityRef.current = Date.now();
+    }
 
     // Activity event listeners
     const events = [

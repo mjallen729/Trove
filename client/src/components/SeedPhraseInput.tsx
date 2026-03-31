@@ -67,9 +67,11 @@ export function SeedPhraseInput({
       const firstEmptyIndex = words.findIndex((w) => w.length === 0);
       const targetIndex = firstEmptyIndex >= 0 ? firstEmptyIndex : 0;
       inputRefs.current[targetIndex]?.focus();
-      setActiveIndex(targetIndex);
+      // Use requestAnimationFrame to avoid synchronous setState in effect
+      requestAnimationFrame(() => setActiveIndex(targetIndex));
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disabled, readOnly]);
 
   const updateWord = useCallback(
     (index: number, value: string) => {

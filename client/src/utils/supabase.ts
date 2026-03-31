@@ -82,6 +82,24 @@ export function clearVaultClient(vaultUid: string): void {
 }
 
 /**
+ * Create a temporary Supabase client with invite code header for vault creation
+ * Temporary: remove when invite code gate is removed
+ */
+export function createInviteClient(inviteCode: string): SupabaseClient {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: "trove-invite",
+    },
+    global: {
+      headers: { "x-invite-code": inviteCode },
+    },
+  });
+}
+
+/**
  * Storage bucket name for encrypted file chunks
  * Path structure: {vault_uid}/{chunk_uid}
  */

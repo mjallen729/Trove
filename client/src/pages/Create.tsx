@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useVault } from "../context/VaultContext";
 import { useToast } from "../context/ToastContext";
@@ -21,11 +21,15 @@ export function Create() {
   const [step, setStep] = useState<Step>("options");
   const [wordCount, setWordCount] = useState<12 | 24>(12);
   const [burnTimer, setBurnTimer] = useState<BurnTimerOption>("never");
+  const [inviteCode, setInviteCode] = useState("");
   const [mnemonic, setMnemonic] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const words = mnemonic ? mnemonicToWords(mnemonic) : [];
+  const words = useMemo(
+    () => (mnemonic ? mnemonicToWords(mnemonic) : []),
+    [mnemonic]
+  );
 
   const handleCopySeedPhrase = useCallback(async () => {
     const seedPhrase = words.join(" ");
@@ -48,7 +52,7 @@ export function Create() {
     if (!mnemonic || !confirmed) return;
 
     clearError();
-    const success = await createVault(mnemonic, burnTimer);
+    const success = await createVault(mnemonic, burnTimer, inviteCode);
 
     if (success) {
       showToast("Vault created successfully", "success");
@@ -146,9 +150,27 @@ export function Create() {
                       : `Your vault will be permanently deleted after ${BURN_TIMER_LABELS[burnTimer]}`}
                   </p>
                 </div>
+
+                {/* Invite code (temporary gate for early access) */}
+                <div className="mt-6 pt-6 border-t border-gray-800">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Invite code
+                  </label>
+                  <input
+                    type="text"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value)}
+                    placeholder="Required for early access"
+                    className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
               </div>
 
-              <Button onClick={handleGenerateSeed} size="lg" fullWidth>
+              <Button
+                onClick={handleGenerateSeed}
+                size="lg"
+                fullWidth
+                disabled={!inviteCode.trim()}>
                 Generate seed phrase
               </Button>
             </>
