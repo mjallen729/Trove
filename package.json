@@ -7,7 +7,8 @@
     "dev": "npm run dev --prefix client",
     "build": "npm run build --prefix client",
     "preview": "npm run preview --prefix client",
-    "lint": "npm run lint --prefix client"
+    "lint": "npm run lint --prefix client",
+    "migrate": "npx supabase db push && npx supabase gen types typescript --project-id \"eorpdrrondjxvlbjglre\" --schema public > ./supabase/schema/public.types.ts"
   },
   "keywords": [],
   "author": "",
