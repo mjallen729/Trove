@@ -177,8 +177,8 @@ export type Database = {
         Args: { p_chunk_index: number; p_file_uid: string }
         Returns: undefined
       }
+      check_invite_code: { Args: { code: string }; Returns: boolean }
       cleanup_expired_sessions: { Args: never; Returns: number }
-      get_app_config: { Args: { config_key: string }; Returns: string }
       validate_storage_session: { Args: { raw_token: string }; Returns: string }
     }
     Enums: {
