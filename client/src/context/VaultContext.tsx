@@ -90,7 +90,7 @@ const initialState: VaultState = {
   vaultUid: null,
   manifest: { manifest_key: "", entries: [] },
   storageUsed: 0,
-  storageLimit: 5368709120, // 5GB
+  storageLimit: 1_000_000_000, // 1GB
   burnAt: null,
 };
 

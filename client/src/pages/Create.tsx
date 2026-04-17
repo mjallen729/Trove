@@ -305,7 +305,7 @@ export function Create() {
                   </div>
                   <div className="flex justify-between items-center py-3">
                     <span className="text-gray-400">Storage limit</span>
-                    <span className="text-white font-medium">5 GB</span>
+                    <span className="text-white font-medium">1 GB</span>
                   </div>
                 </div>
 

@@ -96,8 +96,8 @@ export const CHUNK_SIZE = 10_000_000; // 10MB
 export const MAX_CONCURRENT_UPLOADS = 3;
 export const MAX_CONCURRENT_CHUNKS = 3;
 export const MAX_FILE_NAME_LENGTH = 255;
-export const STORAGE_LIMIT_BYTES = 5_000_000_000; // 5GB
-export const FREE_STORAGE_BYTES = 5_000_000_000; // 5GB free allocation
+export const STORAGE_LIMIT_BYTES = 1_000_000_000; // 1GB
+export const FREE_STORAGE_BYTES = 1_000_000_000; // 1GB free allocation
 export const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 export const IDLE_WARNING_MS = 13 * 60 * 1000; // 13 minutes
 

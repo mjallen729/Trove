@@ -10,7 +10,7 @@ Trove is a MEGA-like encrypted cloud storage platform that uses BIP39 seed phras
 
 **MVP Scope:**
 
-- Free 5GB vaults (payments deferred to v2)
+- Free 1GB vaults (payments deferred to v2)
 - Full upload/download with resumable uploads
 - Folder structure support
 - Burn timer functionality
@@ -154,7 +154,7 @@ CREATE TABLE vaults (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   burn_at TIMESTAMPTZ,            -- When to auto-delete (NULL = never)
   storage_used BIGINT DEFAULT 0,  -- Bytes used
-  storage_limit BIGINT DEFAULT 5368709120  -- 5GB default limit
+  storage_limit BIGINT DEFAULT 1000000000  -- 1GB default limit
 );
 
 -- Track in-progress uploads for resume
@@ -625,7 +625,7 @@ client/src/
 ## Deferred to v2
 
 - **Payments**: Anonymous storage purchases (Stripe + crypto)
-- **Storage tiers**: Paid storage beyond 5GB
+- **Storage tiers**: Paid storage beyond 1GB
 - **Full landing page**: Marketing sections, feature highlights
 - **File sharing**: Shareable links with separate encryption
 - **Multi-device sync**: Real-time updates across sessions
