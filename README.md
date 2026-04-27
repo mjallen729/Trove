@@ -1,5 +1,5 @@
 # Trove
-Anonymous, open source, zero-knowledge encrypted cloud storage that utilizes vaults based on seed phrases.
+Anonymous, open source, zero-knowledge encrypted cloud storage that provides encrypted vaults based on seed phrases.
 
 ### Deployment:
 https://trove-topaz.vercel.app/
