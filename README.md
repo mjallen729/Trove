@@ -1,4 +1,4 @@
-# Trove
+# Trove (Proof-of-Concept)
 Anonymous, open source, zero-knowledge encrypted cloud storage that provides encrypted vaults based on seed phrases.
 
 ### Deployment:
