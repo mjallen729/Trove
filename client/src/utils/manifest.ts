@@ -1,3 +1,8 @@
+/**
+ * @module utils/manifest
+ * @description Vault manifest helpers — creating and removing entries, folder
+ * traversal, breadcrumbs, folder sizes, and unique naming.
+ */
 import type { ManifestEntry, VaultManifest } from "../types/types";
 import { generateFileUid } from "./crypto";
 import { MAX_FILE_NAME_LENGTH } from "../types/types";

@@ -1,3 +1,8 @@
+/**
+ * @module components/FileList
+ * @description Table of files and folders in the current vault folder with
+ * multi-select, navigation, download, and delete actions.
+ */
 import { useState, useCallback, useMemo } from "react";
 import type { ManifestEntry, VaultManifest } from "../types/types";
 import { FileRow } from "./FileRow";

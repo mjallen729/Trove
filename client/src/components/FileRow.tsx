@@ -1,3 +1,8 @@
+/**
+ * @module components/FileRow
+ * @description Single row in the file list showing entry name, size, date,
+ * and a selection checkbox.
+ */
 import type { ManifestEntry, VaultManifest } from "../types/types";
 import { getFolderSize } from "../utils/manifest";
 

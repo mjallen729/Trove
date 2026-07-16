@@ -1,3 +1,8 @@
+/**
+ * @module context/ToastContext
+ * @description Toast notification provider — show, dismiss, and auto-expire
+ * transient messages.
+ */
 import {
   createContext,
   useContext,

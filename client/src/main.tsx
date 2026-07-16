@@ -1,3 +1,8 @@
+/**
+ * @module main
+ * @description Application entry point — installs the Buffer polyfill and
+ * renders the React root.
+ */
 import { Buffer } from "buffer";
 globalThis.Buffer = Buffer;
 

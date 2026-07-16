@@ -1,3 +1,7 @@
+/**
+ * @module pages/Login
+ * @description Vault unlock page — seed phrase entry and validation.
+ */
 import { useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useVault } from "../context/VaultContext";

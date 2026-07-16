@@ -1,3 +1,7 @@
+/**
+ * @module components/ui/Button
+ * @description Reusable button with variant, size, loading, and full-width options.
+ */
 import { type ButtonHTMLAttributes, forwardRef } from "react";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

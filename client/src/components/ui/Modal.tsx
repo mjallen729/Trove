@@ -1,3 +1,8 @@
+/**
+ * @module components/ui/Modal
+ * @description Generic modal dialog with size options and configurable
+ * overlay/escape close behavior.
+ */
 import { type ReactNode, useEffect } from "react";
 
 interface ModalProps {

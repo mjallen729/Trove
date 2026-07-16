@@ -1,3 +1,8 @@
+/**
+ * @module utils/chunks
+ * @description File chunking utilities — reading, encrypting, and decrypting
+ * chunks, storage path derivation, reassembly, and browser download.
+ */
 import { CHUNK_SIZE } from "../types/types";
 import { encrypt, decrypt, deriveChunkUid } from "./crypto";
 

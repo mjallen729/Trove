@@ -1,3 +1,8 @@
+/**
+ * @module components/ConfirmModal
+ * @description Confirmation dialog with configurable labels, danger/primary
+ * variants, and a loading state.
+ */
 import { useEffect, useRef } from "react";
 import { Button } from "./ui/Button";
 

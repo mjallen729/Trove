@@ -1,3 +1,8 @@
+/**
+ * @module components/SeedPhraseInput
+ * @description BIP39 seed phrase entry grid with per-word validation,
+ * autocomplete suggestions, paste support, and a read-only display mode.
+ */
 import {
   useState,
   useRef,

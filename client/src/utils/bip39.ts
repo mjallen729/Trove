@@ -1,3 +1,8 @@
+/**
+ * @module utils/bip39
+ * @description BIP39 mnemonic helpers — generation, validation, word
+ * autocomplete, and parsing.
+ */
 import * as bip39 from "bip39";
 
 // English wordlist for autocomplete (2048 words)

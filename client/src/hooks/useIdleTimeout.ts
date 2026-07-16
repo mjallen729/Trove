@@ -1,3 +1,8 @@
+/**
+ * @module hooks/useIdleTimeout
+ * @description Hook that logs the user out after inactivity, surfacing a
+ * warning countdown beforehand.
+ */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useVault } from "../context/VaultContext";
 import { IDLE_TIMEOUT_MS, IDLE_WARNING_MS } from "../types/types";

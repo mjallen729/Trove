@@ -1,3 +1,8 @@
+/**
+ * @module pages/Landing
+ * @description Public landing page with product overview and entry points to
+ * create or unlock a vault.
+ */
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 

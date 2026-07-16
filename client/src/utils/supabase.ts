@@ -1,3 +1,8 @@
+/**
+ * @module utils/supabase
+ * @description Supabase client factories and constants — base, invite, and
+ * vault-scoped clients with session token headers.
+ */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;

@@ -1,3 +1,8 @@
+/**
+ * @module hooks/useDownload
+ * @description Hook that downloads encrypted file chunks from storage,
+ * decrypts and reassembles them, then saves the file to the browser.
+ */
 import { useState, useCallback } from "react";
 import { useVault } from "../context/VaultContext";
 import { useToast } from "../context/ToastContext";

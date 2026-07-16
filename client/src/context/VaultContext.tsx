@@ -1,3 +1,8 @@
+/**
+ * @module context/VaultContext
+ * @description Global vault state provider — key derivation, vault
+ * creation/unlock/logout, manifest state, and scoped Supabase client access.
+ */
 import {
   createContext,
   useContext,

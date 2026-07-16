@@ -1,3 +1,8 @@
+/**
+ * @module components/UploadDropzone
+ * @description Drag-and-drop target for files and folders that reports dropped
+ * items (with folder structure info) to the parent.
+ */
 import {
   useCallback,
   useState,

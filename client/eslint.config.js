@@ -1,3 +1,8 @@
+/**
+ * @module eslint.config
+ * @description ESLint flat config for the client — TypeScript, React hooks,
+ * and Vite fast-refresh rules.
+ */
 import js from "@eslint/js";
 import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";

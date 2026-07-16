@@ -1,3 +1,8 @@
+/**
+ * @module components/IdleTimeoutModal
+ * @description Warning modal shown before automatic logout, with a countdown
+ * and a stay-logged-in action.
+ */
 import { Button } from "./ui/Button";
 
 interface IdleTimeoutModalProps {

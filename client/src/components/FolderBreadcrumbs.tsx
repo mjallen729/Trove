@@ -1,3 +1,7 @@
+/**
+ * @module components/FolderBreadcrumbs
+ * @description Breadcrumb navigation for the current folder path within the vault.
+ */
 import { useMemo } from "react";
 import type { VaultManifest } from "../types/types";
 import { getBreadcrumbPath } from "../utils/manifest";

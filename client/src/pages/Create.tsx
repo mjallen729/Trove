@@ -1,3 +1,8 @@
+/**
+ * @module pages/Create
+ * @description Vault creation flow — burn timer and word count options, seed
+ * phrase generation, and confirmation steps.
+ */
 import { useState, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useVault } from "../context/VaultContext";

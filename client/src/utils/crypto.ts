@@ -1,3 +1,9 @@
+/**
+ * @module utils/crypto
+ * @description Cryptographic primitives — libsodium initialization, Argon2id
+ * key derivation, authenticated encryption, hashing, UID and session token
+ * generation, and secure memory wiping.
+ */
 import _sodium from "libsodium-wrappers-sumo";
 import { sha3_256 } from "@noble/hashes/sha3.js";
 import { sha256 } from "@noble/hashes/sha2.js";

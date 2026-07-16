@@ -1,3 +1,7 @@
+/**
+ * @module components/ui/Input
+ * @description Reusable text input with label, error, helper text, and icon slots.
+ */
 import { forwardRef, type InputHTMLAttributes } from "react";
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {

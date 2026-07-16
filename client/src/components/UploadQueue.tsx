@@ -1,3 +1,8 @@
+/**
+ * @module components/UploadQueue
+ * @description Floating panel showing per-file upload progress and status,
+ * with cancel and clear-completed controls.
+ */
 import { useState } from "react";
 import type { UploadItem } from "../types/types";
 

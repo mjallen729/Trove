@@ -1,3 +1,8 @@
+/**
+ * @module App
+ * @description Root application component — defines routes and wraps the app
+ * in vault and toast providers.
+ */
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Analytics } from "@vercel/analytics/react";
 import { VaultProvider } from "./context/VaultContext";

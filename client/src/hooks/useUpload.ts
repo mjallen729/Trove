@@ -1,3 +1,8 @@
+/**
+ * @module hooks/useUpload
+ * @description Hook managing the upload queue — file chunking, encryption,
+ * concurrent chunk uploads with retry, and manifest updates.
+ */
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useVault } from "../context/VaultContext";
 import { useToast } from "../context/ToastContext";

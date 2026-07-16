@@ -1,3 +1,8 @@
+/**
+ * @module hooks/useNetworkStatus
+ * @description Hook tracking online/offline status; logs the user out for
+ * security when the connection is lost.
+ */
 import { useEffect, useCallback, useState } from "react";
 import { useVault } from "../context/VaultContext";
 import { useToast } from "../context/ToastContext";

@@ -1,3 +1,8 @@
+/**
+ * @module components/ProtectedRoute
+ * @description Route guard that redirects to the login page unless the vault
+ * is unlocked.
+ */
 import { Navigate } from "react-router-dom";
 import { useVault } from "../context/VaultContext";
 import { Spinner } from "./ui/Spinner";

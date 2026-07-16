@@ -1,3 +1,8 @@
+/**
+ * @module types/types
+ * @description Shared type definitions and constants — manifest, vault,
+ * upload/download state, and UI types.
+ */
 // Core manifest types for vault file/folder structure
 export interface ManifestEntry {
   id: string;

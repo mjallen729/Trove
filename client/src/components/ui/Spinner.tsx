@@ -1,3 +1,7 @@
+/**
+ * @module components/ui/Spinner
+ * @description Animated loading spinner in small, medium, and large sizes.
+ */
 interface SpinnerProps {
   size?: "sm" | "md" | "lg";
   className?: string;
