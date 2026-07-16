@@ -1,3 +1,8 @@
+/**
+ * @module pages/Vault
+ * @description Main vault workspace — header with storage/burn info, file
+ * browser, uploads, downloads, and session modals.
+ */
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVault } from "../context/VaultContext";
@@ -398,19 +403,6 @@ export function Vault() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Storage indicator */}
-            <div className="hidden sm:flex items-center gap-3">
-              <div className="w-32 h-2 bg-gray-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-cyan-500 transition-all"
-                  style={{ width: `${Math.min(storagePercent, 100)}%` }}
-                />
-              </div>
-              <span className="text-sm text-gray-400">
-                {formatBytes(storageUsed)} / {formatBytes(storageLimit)}
-              </span>
-            </div>
-
             {/* Burn timer indicator */}
             {burnAt && (
               <div className="hidden sm:flex items-center gap-2 text-sm text-orange-400">
@@ -429,6 +421,19 @@ export function Vault() {
                 <span>Burns {new Date(burnAt).toLocaleDateString()}</span>
               </div>
             )}
+
+            {/* Storage indicator */}
+            <div className="hidden sm:flex items-center gap-3">
+              <div className="w-32 h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-cyan-500 transition-all"
+                  style={{ width: `${Math.min(storagePercent, 100)}%` }}
+                />
+              </div>
+              <span className="text-sm text-gray-400">
+                {formatBytes(storageUsed)} / {formatBytes(storageLimit)}
+              </span>
+            </div>
 
             <Button variant="ghost" size="sm" onClick={handleLogout}>
               Logout
