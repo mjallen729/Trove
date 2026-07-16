@@ -51,7 +51,7 @@ function parseTodoMd(content) {
       continue;
     }
 
-    if (line.match(/^- \[\.\] /)) {
+    if (line.match(/^- \[[.xX]\] /)) {
       currentItem = null;
       continue;
     }
