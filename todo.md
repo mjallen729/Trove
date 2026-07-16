@@ -1,33 +1,33 @@
 ## Security
 
-- [.] Remove console logging of any vault credentials when not in dev (testing)
-- [.] Enable RLS for postgres
-- [.] Enable RLS for storage
-- [.] Disable public mode on storage bucket (in both url const and edge function)
-- [.] Review first gemini audit in ./audits/ and apply fixes
+- [x] Remove console logging of any vault credentials when not in dev (testing)
+- [x] Enable RLS for postgres
+- [x] Enable RLS for storage
+- [x] Disable public mode on storage bucket (in both url const and edge function)
+- [x] Review first gemini audit in ./audits/ and apply fixes
 <!-- - [ ] Migrate downloads to signed URLs (safest) -->
-- [.] Make sure ALL logging uses custom logger
+- [x] Make sure ALL logging uses custom logger
 <!-- - [ ] Put all files in the root dir for storage instead of putting into vault folders (less intel about approx vault size)
   - Instead, the manifest should reference the files via uid in the db -->
-- [.] For deriving file chunks names in storage, instead of hash(fileUid:chunkIndex) it should be hash(fileUid_Manifest.id:chunkIndex). The Manifest.id is located inside of the encrypted manifest so only the client can access it, therefore no one can derive the file storage name from the file_uid except the client.
+- [x] For deriving file chunks names in storage, instead of hash(fileUid:chunkIndex) it should be hash(fileUid_Manifest.id:chunkIndex). The Manifest.id is located inside of the encrypted manifest so only the client can access it, therefore no one can derive the file storage name from the file_uid except the client.
 - [ ] Fixed salt, change to dynamic
 
 ## Bug
 
-- [.] Multiple GoTrueClient warning on the console
-- [.] Individual checkboxes on files do not work at all (but check all works fine)
-- [.] Uploaded two files of the same name, one overwrote the other.
-- [.] Storage used not updating!
-- [.] Rename vault schema to vault manifest (its actual name), including in db cols ("manifest_cipher"), logs, code, etc.
-- [.] Double clicking a file downloads it (bad)
-- [.] Uploading a folder just unpacks it instead of uploading as a singular "folder" unit
+- [x] Multiple GoTrueClient warning on the console
+- [x] Individual checkboxes on files do not work at all (but check all works fine)
+- [x] Uploaded two files of the same name, one overwrote the other.
+- [x] Storage used not updating!
+- [x] Rename vault schema to vault manifest (its actual name), including in db cols ("manifest_cipher"), logs, code, etc.
+- [x] Double clicking a file downloads it (bad)
+- [x] Uploading a folder just unpacks it instead of uploading as a singular "folder" unit
   - If unpacking is unavoidable, unpack into one of our virtualized folders with the same name to mimic this behavior
-- [.] Arrow is facing wrong direction each state in upload queue component
-- [.] Uploads table in DB not working at all, investigate its functionality
+- [x] Arrow is facing wrong direction each state in upload queue component
+- [x] Uploads table in DB not working at all, investigate its functionality
 
 ## Feature
 
-- [.] Custom logger that logs console only if not in dev environment (meta.env.DEV), wrapper class. Migrate all logs
+- [x] Custom logger that logs console only if not in dev environment (meta.env.DEV), wrapper class. Migrate all logs
 - [ ] Resume upload does not work (upload queue component should display incomplete uploads upon login with a resume button which prompts user to reupload the file)
   - If a user clicks the x button electing not to resume the upload, all the file chunks should be removed from storage; currently they stay. Maybe `received_chunks` can be improved, right now it is an array of numbers.
 - [ ] Feature: buy more storage via Stripe
@@ -44,15 +44,15 @@
 
 ## QA
 
-- [.] vault creation
-- [.] vault login
-- [.] small file upload (<5mb)
-- [.] small file download (<5mb)
-- [.] small file delete
-- [.] folders and organization
-- [.] large file upload (chunked)
+- [x] vault creation
+- [x] vault login
+- [x] small file upload (<5mb)
+- [x] small file download (<5mb)
+- [x] small file delete
+- [x] folders and organization
+- [x] large file upload (chunked)
 - [ ] large file download (chunked)
-- [.] large file delete
+- [x] large file delete
 - [ ] verify vault burn after specified time
 - [ ] Final prettier
 - [ ] Final eslint
