@@ -35,12 +35,12 @@
   - Remove created_at field from storage_transacts db, as it can be used for correlation attacks
   - How else can we maximize privacy?
   - We need to also design the pricing model
-- [ ] Include JS Doc file headers in every file; include module and description tags
+- [x] Include JS Doc file headers in every file; include module and description tags
 - [ ] Drag and drop for file/folder reorganization within vault
 - [ ] Display time in burn countdown in header
 - [ ] Remove created_at from file schema entries
 - [ ] Change `modified` column in vault to `uploaded`
-- [ ] Burn info in the header (orange) should be displayed to the left of current storage
+- [x] Burn info in the header (orange) should be displayed to the left of current storage
 
 ## QA
 
@@ -51,8 +51,8 @@
 - [x] small file delete
 - [x] folders and organization
 - [x] large file upload (chunked)
-- [ ] large file download (chunked)
+- [x] large file download (chunked)
 - [x] large file delete
 - [ ] verify vault burn after specified time
-- [ ] Final prettier
-- [ ] Final eslint
+- [x] Final prettier
+- [x] Final eslint
