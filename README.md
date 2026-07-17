@@ -1,6 +1,6 @@
 # Trove (Proof-of-Concept)
 
-Anonymous, open source, zero-knowledge encrypted cloud storage that provides encrypted vaults based on seed phrases. Used multiple different LLMs to audit the security of the app and to help with problems I got stuck on, such as breaking large files into chunked uploads and upload pause/resume.
+Anonymous, open source, zero-knowledge encrypted cloud storage that provides encrypted vaults based on seed phrases. Used multiple different LLMs to audit the security of the app and to help with problems I got stuck on, such as breaking large files into chunked uploads with automatic per-chunk retry.
 
 For security, the application is completely client-sided and integrates with Supabase simply for object storage and a Postgres instance.
 
