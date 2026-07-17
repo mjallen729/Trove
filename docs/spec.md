@@ -523,7 +523,7 @@ client/src/
 
 ### Upload Failures
 
-- Retry failed chunks automatically (3 attempts with exponential backoff)
+- Retry failed chunks automatically (3 attempts)
 - After all retries fail, show error toast with "Retry" option
 - Upload record preserved for resume
 

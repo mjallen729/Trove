@@ -222,7 +222,7 @@ export function useUpload(): UseUploadReturn {
                 attempt: retries + 1,
                 maxRetries: MAX_RETRIES,
               });
-              // Wait before retry with exponential backoff
+              // Wait before retry with a linear delay (exponential backoff is unnecessary)
               await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * retries));
             }
           }
