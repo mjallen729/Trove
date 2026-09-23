@@ -10,5 +10,4 @@ https://trove-topaz.vercel.app/
 
 ### Disclaimer:
 
-To create a new vault you will need the following invite code:  
-`260287327127a102`
+You need an invite code to create a vault.
