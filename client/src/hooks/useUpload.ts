@@ -94,6 +94,47 @@ export function useUpload(): UseUploadReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadQueue.length]);
 
+  // Delete every chunk path the file could have written (paths are
+  // deterministic; missing ones are ignored by storage) plus its upload record
+  const cleanupIncompleteUpload = async (
+    client: NonNullable<ReturnType<typeof getClient>>,
+    file_uid: string,
+    totalChunks: number,
+    manifestKey: string
+  ) => {
+    const paths = await Promise.all(
+      Array.from({ length: totalChunks }, (_, i) =>
+        getChunkPath(vaultUid!, file_uid, manifestKey, i)
+      )
+    );
+
+    if (paths.length > 0) {
+      const { error: storageError } = await client.storage
+        .from(STORAGE_BUCKET)
+        .remove(paths);
+      if (storageError) {
+        uploadLogger.error("Incomplete upload chunk delete failed:", {
+          message: storageError.message,
+          fileUid: file_uid,
+          chunkCount: paths.length,
+        });
+      }
+    }
+
+    const { error: deleteError } = await client
+      .from(TABLES.UPLOADS)
+      .delete()
+      .eq("file_uid", file_uid);
+    if (deleteError) {
+      uploadLogger.error("Incomplete upload record delete failed:", {
+        code: deleteError.code,
+        message: deleteError.message,
+        details: deleteError.details,
+        hint: deleteError.hint,
+      });
+    }
+  };
+
   const uploadFile = async (
     item: UploadItem,
     client: NonNullable<ReturnType<typeof getClient>>,
@@ -101,6 +142,7 @@ export function useUpload(): UseUploadReturn {
     manifestKey: string
   ) => {
     const { file, file_uid, totalChunks, parentId } = item;
+    let addedToManifest = false;
 
     try {
       uploadLogger.log("Starting upload:", {
@@ -130,6 +172,8 @@ export function useUpload(): UseUploadReturn {
 
       // Upload chunks with concurrency limit
       let completedChunks = 0;
+      // Set when any worker fails so the others stop picking up new chunks
+      let aborted = false;
       const uploadChunks: Promise<void>[] = [];
       const chunkQueue: number[] = Array.from(
         { length: totalChunks },
@@ -137,7 +181,7 @@ export function useUpload(): UseUploadReturn {
       );
 
       const uploadNextChunk = async (): Promise<void> => {
-        while (chunkQueue.length > 0) {
+        while (chunkQueue.length > 0 && !aborted) {
           // Check if cancelled
           if (cancelledRef.current.has(item.id)) {
             throw new Error("Upload cancelled");
@@ -209,6 +253,7 @@ export function useUpload(): UseUploadReturn {
               if (cancelledRef.current.has(item.id)) {
                 throw new Error("Upload cancelled");
               }
+              if (aborted) return;
               if (retries >= MAX_RETRIES) {
                 uploadLogger.error("Max retries exceeded for chunk:", {
                   chunkIndex,
@@ -231,10 +276,20 @@ export function useUpload(): UseUploadReturn {
 
       // Start concurrent chunk uploads
       for (let i = 0; i < MAX_CONCURRENT_CHUNKS; i++) {
-        uploadChunks.push(uploadNextChunk());
+        uploadChunks.push(
+          uploadNextChunk().catch((err) => {
+            aborted = true;
+            throw err;
+          })
+        );
       }
 
-      await Promise.all(uploadChunks);
+      // Wait for every worker to settle so no chunk lands after cleanup runs
+      const results = await Promise.allSettled(uploadChunks);
+      const failure = results.find(
+        (r): r is PromiseRejectedResult => r.status === "rejected"
+      );
+      if (failure) throw failure.reason;
 
       // Add to manifest atomically using updater function
       let finalName = file.name;
@@ -250,6 +305,7 @@ export function useUpload(): UseUploadReturn {
         );
         return addEntry(currentManifest, fileEntry);
       });
+      addedToManifest = true;
 
       uploadLogger.log("File added to vault manifest:", {
         fileName: finalName,
@@ -293,24 +349,17 @@ export function useUpload(): UseUploadReturn {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Upload failed";
 
+      // Remove partial chunks and the upload record, unless the file already
+      // made it into the manifest (then the chunks are live and must stay)
+      if (!addedToManifest) {
+        await cleanupIncompleteUpload(client, file_uid, totalChunks, manifestKey);
+      }
+
       if (errorMessage === "Upload cancelled") {
         uploadLogger.log("Upload cancelled:", {
           fileName: file.name,
           fileUid: file_uid,
         });
-        // Clean up cancelled upload
-        const { error: cancelDeleteError } = await client
-          .from(TABLES.UPLOADS)
-          .delete()
-          .eq("file_uid", file_uid);
-        if (cancelDeleteError) {
-          uploadLogger.error("Cancelled upload record delete failed:", {
-            code: cancelDeleteError.code,
-            message: cancelDeleteError.message,
-            details: cancelDeleteError.details,
-            hint: cancelDeleteError.hint,
-          });
-        }
         setUploadQueue((queue) => queue.filter((q) => q.id !== item.id));
       } else {
         uploadLogger.error("Upload failed:", {
