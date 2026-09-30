@@ -21,7 +21,7 @@ import {
   type FolderUploadInfo,
 } from "../components/UploadDropzone";
 import { IdleTimeoutModal } from "../components/IdleTimeoutModal";
-import { SettingsModal } from "../components/SettingsModal";
+import { EditPasswordModal } from "../components/EditPasswordModal";
 import type { ManifestEntry } from "../types/types";
 import {
   createFolder,
@@ -47,9 +47,15 @@ export function Vault() {
     getClient,
     getManifestKey,
     updateStorageUsed,
+    canWrite,
+    hasEditPassword,
+    unlockEditing,
+    lockEditing,
+    setEditPassword,
   } = useVault();
   const { showToast } = useToast();
-  const { uploadQueue, addToQueue, cancelUpload, clearCompleted } = useUpload();
+  const { uploadQueue, addToQueue, cancelUpload, clearCompleted, isUploading } =
+    useUpload();
   const { downloadFile } = useDownload();
   const { showWarning, remainingSeconds, stayLoggedIn } = useIdleTimeout();
   useNetworkStatus(); // Auto-logout on network drop
@@ -57,7 +63,7 @@ export function Vault() {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
+  const [editModal, setEditModal] = useState<"setup" | "unlock" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ManifestEntry[] | null>(
     null
   );
@@ -84,6 +90,36 @@ export function Vault() {
   const handleNavigate = useCallback((folderId: string | null) => {
     setCurrentFolderId(folderId);
   }, []);
+
+  const handleSetEditPassword = useCallback(
+    async (password: string) => {
+      await setEditPassword(password);
+      showToast("Edit password set", "success");
+      return true;
+    },
+    [setEditPassword, showToast]
+  );
+
+  const handleUnlockEditing = useCallback(
+    async (password: string) => {
+      const ok = await unlockEditing(password);
+      if (ok) showToast("Editing unlocked", "success");
+      return ok;
+    },
+    [unlockEditing, showToast]
+  );
+
+  const handleLockEditing = useCallback(async () => {
+    try {
+      await lockEditing();
+      showToast("Editing locked", "info");
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Unable to lock editing",
+        "error"
+      );
+    }
+  }, [lockEditing, showToast]);
 
   const handleCreateFolder = useCallback(async () => {
     if (!newFolderName.trim()) {
@@ -446,7 +482,11 @@ export function Vault() {
 
       {/* Toolbar */}
       <div className="border-b border-gray-800 px-6 py-3 flex items-center gap-3">
-        {showNewFolderInput ? (
+        {!canWrite ? (
+          <span className="text-sm text-gray-500">
+            Read-only. Unlock editing to make changes.
+          </span>
+        ) : showNewFolderInput ? (
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -550,35 +590,74 @@ export function Vault() {
           </>
         )}
 
-        <Button
-          variant="secondary"
-          size="sm"
-          className="ml-auto"
-          onClick={() => setShowSettings(true)}>
-          <svg
-            className="w-4 h-4 mr-2"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-            />
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-            />
-          </svg>
-          Settings
-        </Button>
+        {/* Edit password: set up, unlock, or re-lock */}
+        {!hasEditPassword ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="ml-auto"
+            onClick={() => setEditModal("setup")}>
+            <svg
+              className="w-4 h-4 mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+              />
+            </svg>
+            Set edit password
+          </Button>
+        ) : !canWrite ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="ml-auto"
+            onClick={() => setEditModal("unlock")}>
+            <svg
+              className="w-4 h-4 mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+              />
+            </svg>
+            Unlock editing
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="ml-auto"
+            disabled={isUploading}
+            title={isUploading ? "Wait for uploads to finish" : "Lock editing"}
+            onClick={handleLockEditing}>
+            <svg
+              className="w-4 h-4 mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"
+              />
+            </svg>
+            Editing unlocked
+          </Button>
+        )}
       </div>
 
       {/* File list with dropzone */}
-      <UploadDropzone onFilesDropped={handleFilesDropped}>
+      <UploadDropzone onFilesDropped={handleFilesDropped} disabled={!canWrite}>
         <main className="flex-1 px-6 py-4 min-h-[400px]">
           <FileList
             manifest={manifest}
@@ -586,6 +665,7 @@ export function Vault() {
             onNavigate={handleNavigate}
             onDownload={handleDownload}
             onDelete={handleDelete}
+            readOnly={!canWrite}
           />
         </main>
       </UploadDropzone>
@@ -615,9 +695,14 @@ export function Vault() {
         />
       )}
 
-      <SettingsModal
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
+      {/* Edit password setup / unlock modal */}
+      <EditPasswordModal
+        mode={editModal ?? "unlock"}
+        isOpen={editModal !== null}
+        onClose={() => setEditModal(null)}
+        onSubmit={
+          editModal === "setup" ? handleSetEditPassword : handleUnlockEditing
+        }
       />
 
       {/* Idle timeout warning modal */}

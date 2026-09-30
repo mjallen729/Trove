@@ -28,8 +28,9 @@ import {
   generateFileUid,
   generateSessionToken,
   hashSessionToken,
+  deriveEditPasswordHash,
 } from "../utils/crypto";
-import { vaultLogger } from "../utils/logger";
+import { vaultLogger, editLogger } from "../utils/logger";
 import {
   type VaultManifest,
   type BurnTimerOption,
@@ -67,6 +68,15 @@ interface VaultState {
   storageUsed: number;
   storageLimit: number;
   burnAt: string | null;
+  // Whether the current session may write (false until the edit password is entered)
+  canWrite: boolean;
+  hasEditPassword: boolean;
+}
+
+// Edit access flags returned by the session RPCs
+interface EditAccess {
+  canWrite: boolean;
+  hasEditPassword: boolean;
 }
 
 // Actions
@@ -80,11 +90,12 @@ type VaultAction =
         storageUsed: number;
         storageLimit: number;
         burnAt: string | null;
-      };
+      } & EditAccess;
     }
   | { type: "UNLOCK_ERROR"; payload: string }
   | { type: "UPDATE_MANIFEST"; payload: VaultManifest }
   | { type: "UPDATE_STORAGE"; payload: number }
+  | { type: "SET_EDIT_ACCESS"; payload: EditAccess }
   | { type: "CLEAR_ERROR" }
   | { type: "LOGOUT" };
 
@@ -97,6 +108,8 @@ const initialState: VaultState = {
   storageUsed: 0,
   storageLimit: 1_000_000_000, // 1GB
   burnAt: null,
+  canWrite: false,
+  hasEditPassword: false,
 };
 
 function vaultReducer(state: VaultState, action: VaultAction): VaultState {
@@ -113,6 +126,8 @@ function vaultReducer(state: VaultState, action: VaultAction): VaultState {
         storageUsed: action.payload.storageUsed,
         storageLimit: action.payload.storageLimit,
         burnAt: action.payload.burnAt,
+        canWrite: action.payload.canWrite,
+        hasEditPassword: action.payload.hasEditPassword,
       };
     case "UNLOCK_ERROR":
       return { ...state, isLoading: false, error: action.payload };
@@ -120,6 +135,8 @@ function vaultReducer(state: VaultState, action: VaultAction): VaultState {
       return { ...state, manifest: action.payload };
     case "UPDATE_STORAGE":
       return { ...state, storageUsed: action.payload };
+    case "SET_EDIT_ACCESS":
+      return { ...state, ...action.payload };
     case "CLEAR_ERROR":
       return { ...state, error: null };
     case "LOGOUT":
@@ -148,6 +165,10 @@ interface VaultContextValue extends VaultState {
   getClient: () => SupabaseClient | null;
   getEncryptionKey: () => Uint8Array | null;
   getManifestKey: () => string | null;
+  /** Resolves false if the password is wrong */
+  unlockEditing: (password: string) => Promise<boolean>;
+  lockEditing: () => Promise<void>;
+  setEditPassword: (password: string) => Promise<void>;
 }
 
 const VaultContext = createContext<VaultContextValue | null>(null);
@@ -197,6 +218,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   // Storage ref for atomic updates (avoids race condition when multiple files upload simultaneously)
   const storageUsedRef = useRef(state.storageUsed);
 
+  // Write access ref so callbacks can check it without re-creating
+  const canWriteRef = useRef(state.canWrite);
+  canWriteRef.current = state.canWrite;
+
   // Sync storage ref when vault is unlocked (external state change)
   useEffect(() => {
     storageUsedRef.current = state.storageUsed;
@@ -211,25 +236,19 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
 
   /**
-   * Create a new session token and store it server-side
-   * Returns the raw token for client use
+   * Create a new session token and store it server-side.
+   * The server decides write access: writable unless an edit password is set.
+   * Returns the raw token for client use plus the edit access flags.
    */
   const createSession = useCallback(
-    async (vaultUid: string, client: SupabaseClient): Promise<string> => {
+    async (client: SupabaseClient): Promise<{ token: string } & EditAccess> => {
       // Generate random token
       const token = await generateSessionToken();
       const tokenHash = await hashSessionToken(token);
 
-      // Calculate expiry (1 hour from now)
-      const expiresAt = new Date(
-        Date.now() + SESSION_TOKEN_TTL_MS
-      ).toISOString();
-
-      // Store hash in database
-      const { error } = await client.from(TABLES.VAULT_SESSIONS).insert({
-        vault_uid: vaultUid,
-        token_hash: tokenHash,
-        expires_at: expiresAt,
+      // Server inserts the session (client has x-vault-uid header) and sets expiry
+      const { data, error } = await client.rpc("create_vault_session", {
+        p_token_hash: tokenHash,
       });
 
       if (error) {
@@ -240,14 +259,19 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         throw new Error("Failed to create session");
       }
 
-      vaultLogger.log("Session created, expires:", expiresAt);
-      return token;
+      const access: EditAccess = {
+        canWrite: Boolean(data?.can_write),
+        hasEditPassword: Boolean(data?.has_edit_password),
+      };
+
+      vaultLogger.log("Session created:", access);
+      return { token, ...access };
     },
     []
   );
 
   /**
-   * Refresh session by creating a new token and deleting the old one
+   * Refresh session by rotating the token in place (keeps write access)
    */
   const refreshSession = useCallback(async (): Promise<void> => {
     const vaultUid = state.vaultUid;
@@ -258,42 +282,27 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Create a temporary client with the old token for the delete operation
+      // The old token identifies the session to rotate
       const tempClient = createVaultClient(vaultUid, oldToken);
 
       // Generate new token
       const newToken = await generateSessionToken();
       const newTokenHash = await hashSessionToken(newToken);
-      const expiresAt = new Date(
-        Date.now() + SESSION_TOKEN_TTL_MS
-      ).toISOString();
 
-      // Insert new session
-      const { error: insertError } = await tempClient
-        .from(TABLES.VAULT_SESSIONS)
-        .insert({
-          vault_uid: vaultUid,
-          token_hash: newTokenHash,
-          expires_at: expiresAt,
-        });
+      const { error } = await tempClient.rpc("refresh_vault_session", {
+        p_new_token_hash: newTokenHash,
+      });
 
-      if (insertError) {
-        vaultLogger.error("Failed to refresh session:", insertError);
+      if (error) {
+        vaultLogger.error("Failed to refresh session:", error);
         return;
       }
-
-      // Delete old session
-      const oldTokenHash = await hashSessionToken(oldToken);
-      await tempClient
-        .from(TABLES.VAULT_SESSIONS)
-        .delete()
-        .eq("token_hash", oldTokenHash);
 
       // Update refs with new token and client
       sessionTokenRef.current = newToken;
       vaultClientRef.current = createVaultClient(vaultUid, newToken);
 
-      vaultLogger.log("Session refreshed, new expiry:", expiresAt);
+      vaultLogger.log("Session refreshed");
     } catch (err) {
       vaultLogger.error("Session refresh error:", err);
     }
@@ -472,12 +481,17 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         const initialClient = createVaultClient(vaultUid);
 
         // Create session token for storage access
-        const sessionToken = await createSession(vaultUid, initialClient);
+        const {
+          token: sessionToken,
+          canWrite,
+          hasEditPassword,
+        } = await createSession(initialClient);
 
         // Store keys and create final client with token
         encryptionKeyRef.current = encryptionKey;
         sessionTokenRef.current = sessionToken;
         vaultClientRef.current = createVaultClient(vaultUid, sessionToken);
+        canWriteRef.current = canWrite;
 
         // Start session refresh timer
         startSessionRefresh();
@@ -490,6 +504,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
             storageUsed: 0,
             storageLimit: FREE_STORAGE_BYTES,
             burnAt,
+            canWrite,
+            hasEditPassword,
           },
         });
 
@@ -593,30 +609,18 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           totalBytes: storageLimit,
         });
 
-        // Update storage_limit in vault if it changed
-        if (storageLimit !== data.storage_limit) {
-          const { error: updateError } = await client
-            .from(TABLES.VAULTS)
-            .update({ storage_limit: storageLimit })
-            .eq("uid", vaultUid);
-
-          if (updateError) {
-            vaultLogger.error("Storage limit update failed:", {
-              code: updateError.code,
-              message: updateError.message,
-              details: updateError.details,
-              hint: updateError.hint,
-            });
-          }
-        }
-
         // Create session token for storage access
-        const sessionToken = await createSession(vaultUid, client);
+        const {
+          token: sessionToken,
+          canWrite,
+          hasEditPassword,
+        } = await createSession(client);
 
         // Store keys and create final client with token
         encryptionKeyRef.current = encryptionKey;
         sessionTokenRef.current = sessionToken;
         vaultClientRef.current = createVaultClient(vaultUid, sessionToken);
+        canWriteRef.current = canWrite;
 
         // Start session refresh timer
         startSessionRefresh();
@@ -629,6 +633,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
             storageUsed: data.storage_used,
             storageLimit,
             burnAt: data.burn_at,
+            canWrite,
+            hasEditPassword,
           },
         });
 
@@ -666,6 +672,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
         if (!encryptionKey || !client || !state.vaultUid) {
           throw new Error("Vault not unlocked");
+        }
+
+        // Server enforces this too; fail early with a clear message
+        if (!canWriteRef.current) {
+          throw new Error("Vault is read-only");
         }
 
         // Get the manifest to save - either directly or via updater function
@@ -720,6 +731,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
       dispatch({ type: "UPDATE_STORAGE", payload: newStorageUsed });
 
+      if (!canWriteRef.current) {
+        vaultLogger.log("Skipping storage_used write: vault is read-only");
+        return;
+      }
+
       // Persist to Supabase
       const client = vaultClientRef.current;
       if (client && state.vaultUid) {
@@ -739,6 +755,110 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [state.vaultUid]
   );
 
+  /**
+   * Verify the edit password and make this session writable
+   */
+  const unlockEditing = useCallback(
+    async (password: string): Promise<boolean> => {
+      const client = vaultClientRef.current;
+      if (!client || !state.vaultUid) {
+        throw new Error("Vault not unlocked");
+      }
+
+      const passwordHash = await deriveEditPasswordHash(
+        password,
+        state.vaultUid
+      );
+      const { data, error } = await client.rpc("unlock_vault_edit", {
+        p_password_hash: passwordHash,
+      });
+
+      if (error) {
+        editLogger.error("Unlock editing failed:", {
+          code: error.code,
+          message: error.message,
+        });
+        throw new Error("Unable to unlock editing");
+      }
+
+      const ok = data === true;
+      if (ok) {
+        canWriteRef.current = true;
+        dispatch({
+          type: "SET_EDIT_ACCESS",
+          payload: { canWrite: true, hasEditPassword: true },
+        });
+      }
+      editLogger.log("Unlock editing:", ok ? "granted" : "rejected");
+      return ok;
+    },
+    [state.vaultUid]
+  );
+
+  /**
+   * Drop this session back to read-only
+   */
+  const lockEditing = useCallback(async (): Promise<void> => {
+    const client = vaultClientRef.current;
+    if (!client) {
+      throw new Error("Vault not unlocked");
+    }
+
+    const { error } = await client.rpc("lock_vault_edit");
+
+    if (error) {
+      editLogger.error("Lock editing failed:", {
+        code: error.code,
+        message: error.message,
+      });
+      throw new Error("Unable to lock editing");
+    }
+
+    canWriteRef.current = false;
+    dispatch({
+      type: "SET_EDIT_ACCESS",
+      payload: { canWrite: false, hasEditPassword: true },
+    });
+    editLogger.log("Editing locked");
+  }, []);
+
+  /**
+   * Set the edit password for the first time. This session stays writable;
+   * every other live session for the vault is demoted server-side.
+   */
+  const setEditPassword = useCallback(
+    async (password: string): Promise<void> => {
+      const client = vaultClientRef.current;
+      if (!client || !state.vaultUid) {
+        throw new Error("Vault not unlocked");
+      }
+
+      const passwordHash = await deriveEditPasswordHash(
+        password,
+        state.vaultUid
+      );
+      const { error } = await client.rpc("set_edit_password", {
+        p_password_hash: passwordHash,
+      });
+
+      if (error) {
+        editLogger.error("Set edit password failed:", {
+          code: error.code,
+          message: error.message,
+        });
+        throw new Error("Unable to set edit password");
+      }
+
+      canWriteRef.current = true;
+      dispatch({
+        type: "SET_EDIT_ACCESS",
+        payload: { canWrite: true, hasEditPassword: true },
+      });
+      editLogger.log("Edit password set");
+    },
+    [state.vaultUid]
+  );
+
   const value: VaultContextValue = {
     ...state,
     unlockVault,
@@ -750,6 +870,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     getClient,
     getEncryptionKey,
     getManifestKey,
+    unlockEditing,
+    lockEditing,
+    setEditPassword,
   };
 
   return (

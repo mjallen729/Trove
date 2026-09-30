@@ -293,3 +293,34 @@ export async function hashSessionToken(token: string): Promise<string> {
   const hash = sha256(tokenBytes);
   return sodium.to_hex(hash);
 }
+
+const EDIT_PASSWORD_SALT_PREFIX = "trove-edit-v1:";
+
+/**
+ * Pre-hash the edit password with Argon2id before sending it to the server.
+ * Salted with the vault UID so the same password differs across vaults.
+ * The server bcrypts this value; it never sees the raw password.
+ */
+export async function deriveEditPasswordHash(
+  password: string,
+  vaultUid: string
+): Promise<string> {
+  const sodium = await getSodium();
+
+  const passwordBytes = sodium.from_string(password);
+  const salt = sha256(
+    sodium.from_string(EDIT_PASSWORD_SALT_PREFIX + vaultUid)
+  ).slice(0, sodium.crypto_pwhash_SALTBYTES);
+
+  const hash = sodium.crypto_pwhash(
+    KEY_LENGTH,
+    passwordBytes,
+    salt,
+    ARGON2_ITERATIONS,
+    ARGON2_MEMORY_KB * 1000,
+    sodium.crypto_pwhash_ALG_ARGON2ID13
+  );
+
+  sodium.memzero(passwordBytes);
+  return sodium.to_hex(hash);
+}
