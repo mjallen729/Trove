@@ -185,11 +185,33 @@ export function Create() {
           {step === "seed" && (
             <>
               <div className="text-center mb-8">
-                <h1 className="text-3xl font-bold text-white mb-2">
+                <h1 className="text-3xl font-bold text-white">
                   Save your seed phrase
                 </h1>
-                <p className="text-gray-400">
-                  Write down these words in order and store them securely
+              </div>
+
+              {/* Security warning */}
+              <div className="mb-6 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-sm">
+                <div className="flex items-center gap-3 mb-1">
+                  {/* <svg
+                    className="w-5 h-5 text-yellow-500 flex-shrink-0"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    />
+                  </svg> */}
+                  <p className="font-semibold text-yellow-400 mb-0.5">
+                    Store this phrase securely
+                  </p>
+                </div>
+                <p className="text-yellow-400/80">
+                  Keep it in a safe location, anyone with this phrase can access
+                  your vault.
                 </p>
               </div>
 
@@ -237,33 +259,22 @@ export function Create() {
                   </button>
                 </div>
               </div>
-
-              {/* Security warning */}
-              <div className="mb-3 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-sm">
-                <div className="flex items-center gap-3 mb-1">
-                  <svg
-                    className="w-5 h-5 text-yellow-500 flex-shrink-0"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                  <p className="font-semibold text-yellow-400">
-                    Store this phrase securely
-                  </p>
-                </div>
-                <p className="pl-8 text-yellow-400/80">
-                  Keep it in a safe location, anyone with this phrase can access
-                  your vault.
-                </p>
-                <br />
-                <p className="pl-8 text-red-500">
-                  If lost, your vault cannot be recovered!
+              <div className="mb-6 flex items-center justify-center gap-2 text-sm text-red-700">
+                <svg
+                  className="w-4 h-4 flex-shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <p>
+                  <span className="font-black">Important:</span> If you lose
+                  your seed phrase, your vault cannot be recovered.
                 </p>
               </div>
 
