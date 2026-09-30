@@ -352,7 +352,12 @@ export function useUpload(): UseUploadReturn {
       // Remove partial chunks and the upload record, unless the file already
       // made it into the manifest (then the chunks are live and must stay)
       if (!addedToManifest) {
-        await cleanupIncompleteUpload(client, file_uid, totalChunks, manifestKey);
+        await cleanupIncompleteUpload(
+          client,
+          file_uid,
+          totalChunks,
+          manifestKey
+        );
       }
 
       if (errorMessage === "Upload cancelled") {
