@@ -16,7 +16,7 @@ import { Vault } from "./pages/Vault";
 function App() {
   return (
     <BrowserRouter>
-      <Analytics />
+      {import.meta.env.PROD && <Analytics />}
       <VaultProvider>
         <ToastProvider>
           <Routes>
