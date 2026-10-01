@@ -119,6 +119,19 @@ Sessions
   └────────────────────────────┴────────────┴───────────────────┴──────────────────────┘
 
 
+Burn timer (optional; set at creation, cannot be changed)
+
+  • Access ends at burn_at exactly: validate_storage_session(), session_can_write(),
+    current_vault_session() and create_vault_session all require an unburned vault, so
+    existing sessions stop working and no new ones can be created.
+  • Physical deletion follows within the hour: pg_cron calls the cleanup-burned-vaults
+    Edge Function, which removes every blob in the vault folder, then the vault row
+    (uploads, sessions, storage_transacts and the edit password cascade).
+  • The function has JWT verification off and accepts only the x-cron-secret shared secret
+    (Supabase Vault → pg_cron; CRON_SECRET on the function).
+  • Not covered: platform backups may retain deleted rows/objects until they age out.
+
+
 Edit password (optional; gates all writes)
 
   password ──► Argon2id(salt = SHA-256("trove-edit-v1:" + vaultUid)[0..16]) ──► hex
