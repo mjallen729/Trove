@@ -94,9 +94,9 @@ export function EditPasswordModal({
         {isSetup && (
           <p className="text-sm text-gray-400">
             Anyone with the seed phrase can view and download files. With an
-            edit password set, uploading, creating folders, and deleting also
-            require this password. It cannot be changed or removed in this
-            version, so store it somewhere safe.
+            edit password enabled, uploading, creating folders, and deleting
+            require this password. It cannot be changed or removed, so store it
+            somewhere safe.
           </p>
         )}
 
