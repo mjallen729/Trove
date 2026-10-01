@@ -175,6 +175,7 @@ export type Database = {
       }
       vaults: {
         Row: {
+          auth_key_hash: string
           burn_at: string | null
           created_at: string | null
           manifest_cipher: string
@@ -183,6 +184,7 @@ export type Database = {
           uid: string
         }
         Insert: {
+          auth_key_hash: string
           burn_at?: string | null
           created_at?: string | null
           manifest_cipher: string
@@ -191,6 +193,7 @@ export type Database = {
           uid: string
         }
         Update: {
+          auth_key_hash?: string
           burn_at?: string | null
           created_at?: string | null
           manifest_cipher?: string
@@ -211,7 +214,10 @@ export type Database = {
       }
       check_invite_code: { Args: { code: string }; Returns: boolean }
       cleanup_expired_sessions: { Args: never; Returns: number }
-      create_vault_session: { Args: { p_token_hash: string }; Returns: Json }
+      create_vault_session: {
+        Args: { p_auth_key: string; p_token_hash: string }
+        Returns: Json
+      }
       current_vault_session: {
         Args: never
         Returns: {
