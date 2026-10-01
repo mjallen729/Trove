@@ -672,7 +672,7 @@ export function Vault() {
 
       {/* Footer info */}
       <footer className="border-t border-gray-800 px-6 py-3 text-center text-xs text-gray-600">
-        Vault ID: {vaultUid?.slice(0, 12)}
+        Vault ID: {vaultUid?.slice(0, 6)}
       </footer>
 
       {/* Upload queue */}
