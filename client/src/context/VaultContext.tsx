@@ -10,6 +10,7 @@ import {
   useCallback,
   useRef,
   useEffect,
+  useLayoutEffect,
   type ReactNode,
 } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -158,8 +159,7 @@ interface VaultContextValue extends VaultState {
   logout: () => Promise<void>;
   updateManifest: (
     manifestOrUpdater:
-      | VaultManifest
-      | ((current: VaultManifest) => VaultManifest)
+      VaultManifest | ((current: VaultManifest) => VaultManifest)
   ) => Promise<void>;
   updateStorageUsed: (delta: number) => Promise<void>;
   clearError: () => void;
@@ -213,7 +213,6 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   // Manifest ref for atomic updates (avoids race conditions)
   const manifestRef = useRef<VaultManifest>(state.manifest);
-  manifestRef.current = state.manifest;
   const manifestUpdateLockRef = useRef<Promise<void>>(Promise.resolve());
 
   // Storage ref for atomic updates (avoids race condition when multiple files upload simultaneously)
@@ -221,7 +220,12 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   // Write access ref so callbacks can check it without re-creating
   const canWriteRef = useRef(state.canWrite);
-  canWriteRef.current = state.canWrite;
+
+  // Keep both refs in sync with state at commit (refs must not be written during render)
+  useLayoutEffect(() => {
+    manifestRef.current = state.manifest;
+    canWriteRef.current = state.canWrite;
+  });
 
   // Sync storage ref when vault is unlocked (external state change)
   useEffect(() => {
@@ -637,8 +641,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const updateManifest = useCallback(
     async (
       manifestOrUpdater:
-        | VaultManifest
-        | ((current: VaultManifest) => VaultManifest)
+        VaultManifest | ((current: VaultManifest) => VaultManifest)
     ): Promise<void> => {
       // Chain onto existing updates to serialize them
       const previousUpdate = manifestUpdateLockRef.current;
