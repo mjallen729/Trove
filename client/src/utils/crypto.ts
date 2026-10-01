@@ -28,6 +28,7 @@ const KEY_LENGTH = 32;
 // Context strings for key derivation (must be exactly 8 bytes)
 const CONTEXT_ENCRYPTION_KEY = "trove_ek";
 const CONTEXT_VAULT_ID = "trove_id";
+const CONTEXT_AUTH_KEY = "trove_au";
 
 /**
  * Derive master secret from seed phrase using Argon2id
@@ -105,16 +106,46 @@ export async function deriveVaultUid(
 }
 
 /**
+ * Derive the vault auth key from master secret
+ * Proves seed phrase possession when creating a session. Returned as hex;
+ * the server stores only its SHA-256.
+ */
+export async function deriveAuthKey(masterSecret: Uint8Array): Promise<string> {
+  const sodium = await getSodium();
+
+  const authKey = sodium.crypto_kdf_derive_from_key(
+    KEY_LENGTH,
+    3, // subkey_id for auth key
+    CONTEXT_AUTH_KEY,
+    masterSecret
+  );
+
+  const hex = sodium.to_hex(authKey);
+  sodium.memzero(authKey);
+  return hex;
+}
+
+/**
+ * Hash the auth key (hex) with SHA-256 for storage on the vault record
+ */
+export async function hashAuthKey(authKey: string): Promise<string> {
+  const sodium = await getSodium();
+  return sodium.to_hex(sha256(sodium.from_hex(authKey)));
+}
+
+/**
  * Derive all keys from seed phrase in one call
- * Returns encryption key and vault UID, securely wipes master secret
+ * Returns encryption key, vault UID, and auth key; securely wipes master secret
  */
 export async function deriveKeys(seedPhrase: string): Promise<{
   encryptionKey: Uint8Array;
   vaultUid: string;
+  authKey: string;
 }> {
   const masterSecret = await deriveMasterSecret(seedPhrase);
   const encryptionKey = await deriveEncryptionKey(masterSecret);
   const vaultUid = await deriveVaultUid(masterSecret);
+  const authKey = await deriveAuthKey(masterSecret);
 
   cryptoLogger.log("deriveKeys:", {
     wordCount: seedPhrase.trim().split(/\s+/).length,
@@ -124,7 +155,7 @@ export async function deriveKeys(seedPhrase: string): Promise<{
   // Wipe master secret immediately after use
   await secureWipe(masterSecret);
 
-  return { encryptionKey, vaultUid };
+  return { encryptionKey, vaultUid, authKey };
 }
 
 /**
@@ -291,5 +322,36 @@ export async function hashSessionToken(token: string): Promise<string> {
   const sodium = await getSodium();
   const tokenBytes = sodium.from_hex(token);
   const hash = sha256(tokenBytes);
+  return sodium.to_hex(hash);
+}
+
+const EDIT_PASSWORD_SALT_PREFIX = "trove-edit-v1:";
+
+/**
+ * Pre-hash the edit password with Argon2id before sending it to the server.
+ * Salted with the vault UID so the same password differs across vaults.
+ * The server bcrypts this value; it never sees the raw password.
+ */
+export async function deriveEditPasswordHash(
+  password: string,
+  vaultUid: string
+): Promise<string> {
+  const sodium = await getSodium();
+
+  const passwordBytes = sodium.from_string(password);
+  const salt = sha256(
+    sodium.from_string(EDIT_PASSWORD_SALT_PREFIX + vaultUid)
+  ).slice(0, sodium.crypto_pwhash_SALTBYTES);
+
+  const hash = sodium.crypto_pwhash(
+    KEY_LENGTH,
+    passwordBytes,
+    salt,
+    ARGON2_ITERATIONS,
+    ARGON2_MEMORY_KB * 1000,
+    sodium.crypto_pwhash_ALG_ARGON2ID13
+  );
+
+  sodium.memzero(passwordBytes);
   return sodium.to_hex(hash);
 }

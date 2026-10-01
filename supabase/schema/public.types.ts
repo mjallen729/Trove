@@ -109,8 +109,38 @@ export type Database = {
           },
         ]
       }
+      vault_edit_passwords: {
+        Row: {
+          created_at: string | null
+          password_hash: string
+          updated_at: string | null
+          vault_uid: string
+        }
+        Insert: {
+          created_at?: string | null
+          password_hash: string
+          updated_at?: string | null
+          vault_uid: string
+        }
+        Update: {
+          created_at?: string | null
+          password_hash?: string
+          updated_at?: string | null
+          vault_uid?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_edit_passwords_vault_uid_fkey"
+            columns: ["vault_uid"]
+            isOneToOne: true
+            referencedRelation: "vaults"
+            referencedColumns: ["uid"]
+          },
+        ]
+      }
       vault_sessions: {
         Row: {
+          can_write: boolean
           created_at: string | null
           expires_at: string
           id: string
@@ -118,6 +148,7 @@ export type Database = {
           vault_uid: string
         }
         Insert: {
+          can_write?: boolean
           created_at?: string | null
           expires_at: string
           id?: string
@@ -125,6 +156,7 @@ export type Database = {
           vault_uid: string
         }
         Update: {
+          can_write?: boolean
           created_at?: string | null
           expires_at?: string
           id?: string
@@ -143,6 +175,7 @@ export type Database = {
       }
       vaults: {
         Row: {
+          auth_key_hash: string
           burn_at: string | null
           created_at: string | null
           manifest_cipher: string
@@ -151,6 +184,7 @@ export type Database = {
           uid: string
         }
         Insert: {
+          auth_key_hash: string
           burn_at?: string | null
           created_at?: string | null
           manifest_cipher: string
@@ -159,6 +193,7 @@ export type Database = {
           uid: string
         }
         Update: {
+          auth_key_hash?: string
           burn_at?: string | null
           created_at?: string | null
           manifest_cipher?: string
@@ -179,6 +214,39 @@ export type Database = {
       }
       check_invite_code: { Args: { code: string }; Returns: boolean }
       cleanup_expired_sessions: { Args: never; Returns: number }
+      create_vault_session: {
+        Args: { p_auth_key: string; p_token_hash: string }
+        Returns: Json
+      }
+      current_vault_session: {
+        Args: never
+        Returns: {
+          can_write: boolean
+          created_at: string | null
+          expires_at: string
+          id: string
+          token_hash: string
+          vault_uid: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "vault_sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      lock_vault_edit: { Args: never; Returns: undefined }
+      refresh_vault_session: {
+        Args: { p_new_token_hash: string }
+        Returns: undefined
+      }
+      session_can_write: { Args: { raw_token: string }; Returns: string }
+      set_edit_password: {
+        Args: { p_password_hash: string }
+        Returns: undefined
+      }
+      staging_wipe: { Args: never; Returns: undefined }
+      unlock_vault_edit: { Args: { p_password_hash: string }; Returns: boolean }
       validate_storage_session: { Args: { raw_token: string }; Returns: string }
     }
     Enums: {
