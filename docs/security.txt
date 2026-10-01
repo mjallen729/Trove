@@ -45,10 +45,10 @@ Security practices for deriving vault keys from a plaintext seed phrase
                                 │
               ┌─────────────────┼─────────────────┐
               ▼                 ▼                 ▼
-         subkey 1          subkey 2          subkey 3
-     encryptionKey     SHA3-256 → hex      hex encode
-     (client only)       vaultUid           authKey
-                     (every request)   (session creation)
+         subkey 1           subkey 2           subkey 3
+       encryptionKey     SHA3-256 → hex       hex encode
+       (client only)        vaultUid            authKey
+                        (every request)    (session creation)
 
 Summary:
 ┌──────┬──────────────┬──────────────────────────────────────────────┐
