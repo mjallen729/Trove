@@ -519,11 +519,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           await secureWipe(encryptionKey);
           throw new Error("Unable to access vault");
         }
-        const {
-          token: sessionToken,
-          canWrite,
-          hasEditPassword,
-        } = session;
+        const { token: sessionToken, canWrite, hasEditPassword } = session;
         const client = createVaultClient(vaultUid, sessionToken);
 
         // Fetch vault record
