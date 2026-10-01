@@ -3,7 +3,13 @@
  * @description Hook managing the upload queue — file chunking, encryption,
  * concurrent chunk uploads with retry, and manifest updates.
  */
-import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+} from "react";
 import { useVault } from "../context/VaultContext";
 import { useToast } from "../context/ToastContext";
 import type { UploadItem } from "../types/types";
@@ -42,57 +48,13 @@ export function useUpload(): UseUploadReturn {
   const { showToast } = useToast();
   const [uploadQueue, setUploadQueue] = useState<UploadItem[]>([]);
   const uploadQueueRef = useRef<UploadItem[]>([]);
-  uploadQueueRef.current = uploadQueue;
+  // Keep the ref in sync at commit so async callbacks read the latest queue
+  useLayoutEffect(() => {
+    uploadQueueRef.current = uploadQueue;
+  });
   const activeUploadsRef = useRef(0);
   const cancelledRef = useRef(new Set<string>());
   const processingRef = useRef(new Set<string>());
-
-  // Process queue when items are added or uploads complete
-  const processQueue = useCallback(async () => {
-    const client = getClient();
-    const encryptionKey = getEncryptionKey();
-
-    const manifestKey = getManifestKey();
-    if (!client || !encryptionKey || !vaultUid || !manifestKey) return;
-
-    // Read from ref to get latest state (avoids stale closure)
-    const currentQueue = uploadQueueRef.current;
-
-    // Find pending items that aren't already being processed
-    const pending = currentQueue.filter(
-      (item) => item.status === "pending" && !processingRef.current.has(item.id)
-    );
-    const canStart = MAX_CONCURRENT_UPLOADS - activeUploadsRef.current;
-
-    if (canStart <= 0 || pending.length === 0) return;
-
-    const toStart = pending.slice(0, canStart);
-
-    // Mark as processing SYNCHRONOUSLY before any state updates
-    toStart.forEach((item) => processingRef.current.add(item.id));
-
-    // Mark as uploading in state
-    setUploadQueue((queue) =>
-      queue.map((item) =>
-        toStart.some((s) => s.id === item.id)
-          ? { ...item, status: "uploading" as const, startTime: Date.now() }
-          : item
-      )
-    );
-
-    // Start uploads (don't await)
-    toStart.forEach((item) => {
-      activeUploadsRef.current++;
-      uploadFile(item, client, encryptionKey, manifestKey);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getClient, getEncryptionKey, getManifestKey, vaultUid]);
-
-  // Effect to process queue
-  useEffect(() => {
-    processQueue();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uploadQueue.length]);
 
   // Delete every chunk path the file could have written (paths are
   // deterministic; missing ones are ignored by storage) plus its upload record
@@ -408,6 +370,53 @@ export function useUpload(): UseUploadReturn {
       })
     );
   };
+
+  // Process queue when items are added or uploads complete
+  const processQueue = useCallback(async () => {
+    const client = getClient();
+    const encryptionKey = getEncryptionKey();
+
+    const manifestKey = getManifestKey();
+    if (!client || !encryptionKey || !vaultUid || !manifestKey) return;
+
+    // Read from ref to get latest state (avoids stale closure)
+    const currentQueue = uploadQueueRef.current;
+
+    // Find pending items that aren't already being processed
+    const pending = currentQueue.filter(
+      (item) => item.status === "pending" && !processingRef.current.has(item.id)
+    );
+    const canStart = MAX_CONCURRENT_UPLOADS - activeUploadsRef.current;
+
+    if (canStart <= 0 || pending.length === 0) return;
+
+    const toStart = pending.slice(0, canStart);
+
+    // Mark as processing SYNCHRONOUSLY before any state updates
+    toStart.forEach((item) => processingRef.current.add(item.id));
+
+    // Mark as uploading in state
+    setUploadQueue((queue) =>
+      queue.map((item) =>
+        toStart.some((s) => s.id === item.id)
+          ? { ...item, status: "uploading" as const, startTime: Date.now() }
+          : item
+      )
+    );
+
+    // Start uploads (don't await)
+    toStart.forEach((item) => {
+      activeUploadsRef.current++;
+      uploadFile(item, client, encryptionKey, manifestKey);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getClient, getEncryptionKey, getManifestKey, vaultUid]);
+
+  // Effect to process queue
+  useEffect(() => {
+    processQueue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadQueue.length]);
 
   const addToQueue = useCallback((files: File[], parentId: string | null) => {
     const newItems: UploadItem[] = files.map((file) => ({

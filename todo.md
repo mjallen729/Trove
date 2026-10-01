@@ -6,8 +6,10 @@
 - [x] Disable public mode on storage bucket (in both url const and edge function)
 - [x] Review first gemini audit in ./audits/ and apply fixes
 - [x] Make sure ALL logging uses custom logger
+
 <!-- - [ ] Put all files in the root dir for storage instead of putting into vault folders (less intel about approx vault size)
   - Instead, the manifest should reference the files via uid in the db -->
+
 - [x] For deriving file chunks names in storage, instead of hash(fileUid:chunkIndex) it should be hash(fileUid_Manifest.id:chunkIndex). The Manifest.id is located inside of the encrypted manifest so only the client can access it, therefore no one can derive the file storage name from the file_uid except the client.
 - [ ] Fixed salt, change to dynamic
 
