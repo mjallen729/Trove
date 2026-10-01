@@ -1,4 +1,4 @@
-Security practices for generating a public vault identifier from a plaintext seed phrase
+Security practices for deriving vault keys from a plaintext seed phrase
 
 ┌─────────────────────────────────────────────────────────────────────┐
 │  SEED PHRASE (plaintext)                                            │
@@ -23,7 +23,7 @@ Security practices for generating a public vault identifier from a plaintext see
 │  │    • output length: 32 bytes                                │    │
 │  └─────────────────────────────────────────────────────────────┘    │
 │                                                                     │
-│  Output: masterSecret (32 bytes)                                    │
+│  Output: masterSecret (32 bytes, wiped after derivation)            │
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │
                                 ▼
@@ -33,30 +33,22 @@ Security practices for generating a public vault identifier from a plaintext see
 │  ┌─────────────────────────────────────────────────────────────┐    │
 │  │  Input:                                                     │    │
 │  │    • master key: masterSecret                               │    │
-│  │    • subkey_id: 2  (1 = vault encryption key, 2 = vault ID) │    │
-│  │    • context: "trove_id" (8 bytes)                          │    │
+│  │    • subkey_id / context (8 bytes):                         │    │
+│  │        1 / "trove_ek"  → encryption key                     │    │
+│  │        2 / "trove_id"  → vault ID                           │    │
+│  │        3 / "trove_au"  → auth key                           │    │
 │  │    • output length: 32 bytes                                │    │
 │  └─────────────────────────────────────────────────────────────┘    │
 │                                                                     │
-│  Output: derivedKey (32 bytes)                                      │
+│  Output: three independent 32-byte subkeys                          │
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  SHA3-256 HASH (Algorithm Diversity)                                │
-│  sha3_256(derivedKey)                                               │
-│                                                                     │
-│  Output: hash (32 bytes)                                            │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  HEX ENCODE                                                         │
-│  sodium.to_hex(hash)                                                │
-│                                                                     │
-│  Output: vaultUid (64 character hex string)                         │
-│  "a1b2c3d4e5f6..."                                                  │
-└─────────────────────────────────────────────────────────────────────┘
+              ┌─────────────────┼─────────────────┐
+              ▼                 ▼                 ▼
+         subkey 1          subkey 2          subkey 3
+     encryptionKey     SHA3-256 → hex      hex encode
+     (client only)       vaultUid           authKey
+                     (every request)   (session creation)
 
 Summary:
 ┌──────┬──────────────┬──────────────────────────────────────────────┐
@@ -66,17 +58,83 @@ Summary:
 ├──────┼──────────────┼──────────────────────────────────────────────┤
 │ 2    │ Argon2id     │ Slow hash to resist brute-force (~100ms)     │
 ├──────┼──────────────┼──────────────────────────────────────────────┤
-│ 3    │ Blake2b KDF  │ Derive separate key for vault ID (subkey 2)  │
+│ 3    │ Blake2b KDF  │ Derive three separate subkeys (ids 1, 2, 3)  │
 ├──────┼──────────────┼──────────────────────────────────────────────┤
-│ 4    │ SHA3-256     │ Algorithm diversity (defense-in-depth)       │
+│ 4    │ SHA3-256     │ Vault ID only: algorithm diversity           │
 ├──────┼──────────────┼──────────────────────────────────────────────┤
-│ 5    │ Hex encode   │ Convert to 64-char string for DB primary key │
+│ 5    │ Hex encode   │ Vault ID: 64-char DB primary key             │
+│      │              │ Auth key: 64-char session credential         │
 └──────┴──────────────┴──────────────────────────────────────────────┘
-Parallel derivation for encryption key:
 
-masterSecret ──┬── KDF(subkey=1, ctx="trove_ek") ──► encryptionKey (stays client-side)
-               │
-               └── KDF(subkey=2, ctx="trove_id") ──► sha3_hash ──► vaultUid (sent to server)
+Derived keys:
+┌──────────────┬──────────────────────┬───────────────────────────────────────────────┐
+│ Key          │ Leaves the client?   │ Purpose                                       │
+├──────────────┼──────────────────────┼───────────────────────────────────────────────┤
+│ encryptionKey│ Never                │ XChaCha20-Poly1305 for manifest and chunks    │
+├──────────────┼──────────────────────┼───────────────────────────────────────────────┤
+│ vaultUid     │ Every request        │ Lookup ID (x-vault-uid header, primary key).  │
+│              │ (x-vault-uid)        │ NOT a credential: grants nothing on its own.  │
+├──────────────┼──────────────────────┼───────────────────────────────────────────────┤
+│ authKey      │ Only at session      │ Proves seed phrase possession. Required by    │
+│              │ creation             │ create_vault_session; never stored raw.       │
+└──────────────┴──────────────────────┴───────────────────────────────────────────────┘
 
-The encryption key and vault UID are derived from the same master secret but with different subkey IDs, so knowing one doesn't reveal the other.
+All three are derived from the same master secret with different subkey IDs and contexts,
+so knowing any one reveals nothing about the others.
 
+
+Auth key verification (vault UID alone grants no access)
+
+  Vault creation:
+    client: auth_key_hash = SHA-256(authKey)  ──► stored in vaults.auth_key_hash
+
+  Unlock:
+    client ──► create_vault_session(token_hash, authKey)   [header: x-vault-uid]
+    server:    SHA-256(authKey) == vaults.auth_key_hash ?
+                 no  → "Unable to access vault" (same error for unknown vault; no existence disclosure)
+                 yes → insert session row, return { can_write, has_edit_password }
+
+  A fast hash (SHA-256) is sufficient here: the auth key is 256 bits of random-equivalent
+  entropy (already behind Argon2id), so the stored hash cannot be brute-forced, and the
+  server only accepts the preimage.
+
+
+Sessions
+
+  • Client generates a random 32-byte token; the server stores only SHA-256(token).
+  • Requests carry the raw token in x-vault-token. RLS validates it via
+    validate_storage_session() (live session) or session_can_write() (live + writable).
+  • TTL 1 hour; rotated in place every 30 minutes (refresh_vault_session keeps can_write).
+  • Deleted on logout, idle timeout, and network drop.
+  • Sessions are created only via RPC; a session row is visible/deletable only by its token holder.
+
+  Access matrix:
+  ┌────────────────────────────┬────────────┬───────────────────┬──────────────────────┐
+  │ Holder                     │ Read files │ Write/delete      │ Notes                │
+  ├────────────────────────────┼────────────┼───────────────────┼──────────────────────┤
+  │ Vault UID only             │ No         │ No                │ Cannot get a session │
+  │ Seed phrase, no edit pw    │ Yes        │ Yes               │ can_write = true     │
+  │ Seed phrase, edit pw set   │ Yes        │ After unlock_     │ Read-only session    │
+  │                            │            │ vault_edit        │ until password given │
+  └────────────────────────────┴────────────┴───────────────────┴──────────────────────┘
+
+
+Edit password (optional; gates all writes)
+
+  password ──► Argon2id(salt = SHA-256("trove-edit-v1:" + vaultUid)[0..16]) ──► hex
+           ──► server: bcrypt (pgcrypto, cost 10) ──► vault_edit_passwords.password_hash
+
+  • Human-chosen, so it gets slow hashing on both sides (unlike the auth key).
+  • The server never sees the raw password; the client never sees the stored hash
+    (vault_edit_passwords has RLS enabled and no policies; only SECURITY DEFINER RPCs read it).
+  • Setting it demotes every other live session to read-only.
+  • Cannot be changed or removed yet. No server-side rate limiting on unlock attempts yet.
+
+
+Server-side write enforcement
+
+  • vaults: clients may UPDATE only manifest_cipher and storage_used (column grants), and only
+    with a writable session (RLS WITH CHECK → blocked writes raise 42501, not silent no-ops).
+  • uploads, storage.objects (INSERT/DELETE): writable session required.
+  • storage_transacts: read-only to clients; the free allocation row is created by trigger.
+  • append_received_chunk (SECURITY DEFINER): checks session_can_write itself.
