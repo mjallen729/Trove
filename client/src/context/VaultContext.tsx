@@ -29,6 +29,7 @@ import {
   generateSessionToken,
   hashSessionToken,
   deriveEditPasswordHash,
+  hashAuthKey,
 } from "../utils/crypto";
 import { vaultLogger, editLogger } from "../utils/logger";
 import {
@@ -237,18 +238,24 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   /**
    * Create a new session token and store it server-side.
+   * The auth key proves seed phrase possession; the vault UID alone is not enough.
    * The server decides write access: writable unless an edit password is set.
    * Returns the raw token for client use plus the edit access flags.
    */
   const createSession = useCallback(
-    async (client: SupabaseClient): Promise<{ token: string } & EditAccess> => {
+    async (
+      vaultUid: string,
+      authKey: string
+    ): Promise<{ token: string } & EditAccess> => {
       // Generate random token
       const token = await generateSessionToken();
       const tokenHash = await hashSessionToken(token);
 
-      // Server inserts the session (client has x-vault-uid header) and sets expiry
+      // Server verifies the auth key, inserts the session, and sets expiry
+      const client = createVaultClient(vaultUid);
       const { data, error } = await client.rpc("create_vault_session", {
         p_token_hash: tokenHash,
+        p_auth_key: authKey,
       });
 
       if (error) {
@@ -406,7 +413,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
       try {
         // Derive keys from seed phrase
-        const { encryptionKey, vaultUid } = await deriveKeys(seedPhrase);
+        const { encryptionKey, vaultUid, authKey } =
+          await deriveKeys(seedPhrase);
 
         // Calculate burn_at timestamp
         const burnAt = calculateBurnAt(burnTimer);
@@ -427,6 +435,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           manifest_cipher: bytesToHex(manifestCipher),
           burn_at: burnAt,
           storage_limit: FREE_STORAGE_BYTES,
+          auth_key_hash: await hashAuthKey(authKey),
         });
 
         if (error) {
@@ -451,41 +460,14 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           storageLimit: FREE_STORAGE_BYTES,
         });
 
-        // Create free storage transaction (using vault client for x-vault-uid header)
-        const vaultClient = createVaultClient(vaultUid);
-        const { error: transactError } = await vaultClient
-          .from(TABLES.STORAGE_TRANSACTS)
-          .insert({
-            transaction_uid: `free-${vaultUid.slice(0, 16)}`,
-            vault_uid: vaultUid,
-            storage_bytes: FREE_STORAGE_BYTES,
-            previous_transact: null,
-          });
-
-        if (transactError) {
-          vaultLogger.error("Storage transaction failed:", {
-            code: transactError.code,
-            message: transactError.message,
-            details: transactError.details,
-            hint: transactError.hint,
-          });
-        } else {
-          vaultLogger.log(
-            "Free storage transaction created:",
-            FREE_STORAGE_BYTES,
-            "bytes"
-          );
-        }
-
-        // Create initial client (without token) for session creation
-        const initialClient = createVaultClient(vaultUid);
+        // Free storage transaction is created server-side by trigger
 
         // Create session token for storage access
         const {
           token: sessionToken,
           canWrite,
           hasEditPassword,
-        } = await createSession(initialClient);
+        } = await createSession(vaultUid, authKey);
 
         // Store keys and create final client with token
         encryptionKeyRef.current = encryptionKey;
@@ -526,10 +508,23 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
       try {
         // Derive keys from seed phrase
-        const { encryptionKey, vaultUid } = await deriveKeys(seedPhrase);
+        const { encryptionKey, vaultUid, authKey } =
+          await deriveKeys(seedPhrase);
 
-        // Create client with vault header
-        const client = createVaultClient(vaultUid);
+        // Create session first: every vault read requires one
+        let session: { token: string } & EditAccess;
+        try {
+          session = await createSession(vaultUid, authKey);
+        } catch {
+          await secureWipe(encryptionKey);
+          throw new Error("Unable to access vault");
+        }
+        const {
+          token: sessionToken,
+          canWrite,
+          hasEditPassword,
+        } = session;
+        const client = createVaultClient(vaultUid, sessionToken);
 
         // Fetch vault record
         const { data, error } = await client
@@ -609,17 +604,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           totalBytes: storageLimit,
         });
 
-        // Create session token for storage access
-        const {
-          token: sessionToken,
-          canWrite,
-          hasEditPassword,
-        } = await createSession(client);
-
-        // Store keys and create final client with token
+        // Store keys and the session client
         encryptionKeyRef.current = encryptionKey;
         sessionTokenRef.current = sessionToken;
-        vaultClientRef.current = createVaultClient(vaultUid, sessionToken);
+        vaultClientRef.current = client;
         canWriteRef.current = canWrite;
 
         // Start session refresh timer
