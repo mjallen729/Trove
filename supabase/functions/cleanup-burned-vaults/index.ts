@@ -1,5 +1,5 @@
 // Supabase Edge Function to cleanup burned vaults
-// This function should be called periodically via pg_cron or external scheduler
+// Called hourly by pg_cron (see migration 016), authenticated by CRON_SECRET
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -9,8 +9,23 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// Objects listed and removed per storage call
+const STORAGE_BATCH_SIZE = 1000;
+
 interface BurnedVault {
   uid: string;
+}
+
+// Constant-time string comparison for the shared secret
+function timingSafeEqual(a: string, b: string): boolean {
+  const aBytes = new TextEncoder().encode(a);
+  const bBytes = new TextEncoder().encode(b);
+  if (aBytes.length !== bBytes.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aBytes.length; i++) {
+    diff |= aBytes[i] ^ bBytes[i];
+  }
+  return diff === 0;
 }
 
 Deno.serve(async (req) => {
@@ -20,15 +35,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verify this is an authorized request (from pg_cron or with service key)
-    const authHeader = req.headers.get("authorization");
+    // Verify this is an authorized request (pg_cron sends the shared secret).
+    // JWT verification is off for this function, so this is the only gate.
+    const cronSecret = Deno.env.get("CRON_SECRET");
+    const providedSecret = req.headers.get("x-cron-secret");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const isInternalCall = req.headers.get("x-supabase-internal") === "true";
 
-    const hasValidServiceKey =
-      !!serviceRoleKey && !!authHeader && authHeader.includes(serviceRoleKey);
-
-    if (!hasValidServiceKey && !isInternalCall) {
+    if (
+      !cronSecret ||
+      !providedSecret ||
+      !timingSafeEqual(providedSecret, cronSecret)
+    ) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -48,7 +65,7 @@ Deno.serve(async (req) => {
       .from("vaults")
       .select("uid")
       .not("burn_at", "is", null)
-      .lt("burn_at", new Date().toISOString());
+      .lte("burn_at", new Date().toISOString());
 
     if (fetchError) {
       throw new Error(`Failed to fetch burned vaults: ${fetchError.message}`);
@@ -68,31 +85,40 @@ Deno.serve(async (req) => {
 
     for (const vault of burnedVaults as BurnedVault[]) {
       try {
-        // List all files in the vault's storage folder
-        const { data: files, error: listError } = await supabase.storage
-          .from("vault_files")
-          .list(vault.uid);
+        // Delete all files in the vault's storage folder. list() is paginated,
+        // so keep listing from the start until the folder is empty. The vault
+        // record is only deleted once every blob is gone; otherwise the
+        // remaining blobs could never be found again.
+        let storageError: string | null = null;
+        while (true) {
+          const { data: files, error: listError } = await supabase.storage
+            .from("vault_files")
+            .list(vault.uid, { limit: STORAGE_BATCH_SIZE });
 
-        if (listError) {
-          errors.push(
-            `Failed to list files for vault ${vault.uid}: ${listError.message}`
-          );
-          continue;
-        }
+          if (listError) {
+            storageError = `Failed to list files for vault ${vault.uid}: ${listError.message}`;
+            break;
+          }
 
-        // Delete all files in the vault folder
-        if (files && files.length > 0) {
+          if (!files || files.length === 0) break;
+
           const filePaths = files.map((f) => `${vault.uid}/${f.name}`);
-          const { error: deleteError } = await supabase.storage
+          const { data: removed, error: deleteError } = await supabase.storage
             .from("vault_files")
             .remove(filePaths);
 
-          if (deleteError) {
-            errors.push(
-              `Failed to delete files for vault ${vault.uid}: ${deleteError.message}`
-            );
-            continue;
+          // An empty result with no error would loop forever
+          if (deleteError || !removed || removed.length === 0) {
+            storageError = `Failed to delete files for vault ${vault.uid}: ${
+              deleteError?.message ?? "no files removed"
+            }`;
+            break;
           }
+        }
+
+        if (storageError) {
+          errors.push(storageError);
+          continue;
         }
 
         // Delete any pending uploads for this vault
