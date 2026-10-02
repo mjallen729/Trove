@@ -29,5 +29,6 @@ export const uploadLogger = new Logger("Upload");
 export const downloadLogger = new Logger("Download");
 export const deleteLogger = new Logger("Delete");
 export const editLogger = new Logger("Edit");
+export const transferLogger = new Logger("Transfer");
 
 export default Logger;

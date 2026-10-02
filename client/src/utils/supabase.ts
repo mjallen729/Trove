@@ -83,7 +83,12 @@ export function createVaultClient(
  * Clear cached vault client (call on logout)
  */
 export function clearVaultClient(vaultUid: string): void {
-  vaultClientCache.delete(vaultUid);
+  // Clients are cached under both `${vaultUid}` and `${vaultUid}:${token}`
+  for (const key of vaultClientCache.keys()) {
+    if (key === vaultUid || key.startsWith(`${vaultUid}:`)) {
+      vaultClientCache.delete(key);
+    }
+  }
 }
 
 /**
