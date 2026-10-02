@@ -14,8 +14,13 @@ export interface ManifestEntry {
   size?: number;
   chunk_count?: number;
   mime_type?: string;
+  // Chunk encryption format. Absent = 1 (no associated data).
+  // 2 = each chunk bound to `${file_uid}:${chunk_index}` as AEAD data.
+  enc_v?: number;
   created_at: string;
 }
+
+export const CHUNK_ENC_VERSION = 2;
 
 export interface VaultManifest {
   manifest_key: string;
@@ -54,16 +59,28 @@ export interface UploadItem {
   error?: string;
   chunksUploaded: number;
   totalChunks: number;
+  // Chunk indexes confirmed stored this session; a retry skips them
+  uploadedChunks: number[];
+  // The `uploads` row exists (created on the first attempt)
+  recordCreated: boolean;
+  // Errored upload kept its chunks and can continue
+  canRetry?: boolean;
   speed?: number;
   startTime?: number;
 }
 
 // Download progress tracking
 export interface DownloadProgress {
+  id: string;
   fileId: string;
   fileName: string;
+  size: number;
   progress: number;
-  status: "downloading" | "decrypting" | "completed" | "error";
+  bytesDone: number;
+  speed?: number;
+  status:
+    "pending" | "downloading" | "paused" | "completed" | "error" | "cancelled";
+  error?: string;
 }
 
 // Burn timer options
@@ -100,6 +117,11 @@ export interface Toast {
 export const CHUNK_SIZE = 10_000_000; // 10MB
 export const MAX_CONCURRENT_UPLOADS = 3;
 export const MAX_CONCURRENT_CHUNKS = 3;
+export const MAX_CONCURRENT_DOWNLOADS = 1; // files at a time
+export const DOWNLOAD_CHUNK_CONCURRENCY = 3; // chunks in flight per file
+export const STORAGE_REMOVE_BATCH = 1000; // Supabase remove() cap per call
+export const STALE_UPLOAD_AGE_MS = 24 * 60 * 60 * 1000; // sweep records older than this
+export const SESSION_REFRESH_RETRY_MS = 60 * 1000;
 export const MAX_FILE_NAME_LENGTH = 255;
 export const STORAGE_LIMIT_BYTES = 1_000_000_000; // 1GB
 export const FREE_STORAGE_BYTES = 1_000_000_000; // 1GB free allocation
