@@ -161,10 +161,12 @@ export async function deriveKeys(seedPhrase: string): Promise<{
 /**
  * Encrypt data with XChaCha20-Poly1305
  * Returns: [nonce (24 bytes)][ciphertext + auth tag (16 bytes)]
+ * `aad` is authenticated but not stored; the decryptor must supply the same.
  */
 export async function encrypt(
   plaintext: Uint8Array,
-  key: Uint8Array
+  key: Uint8Array,
+  aad: Uint8Array | null = null
 ): Promise<Uint8Array> {
   const sodium = await getSodium();
 
@@ -175,7 +177,7 @@ export async function encrypt(
 
   const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
     plaintext,
-    null, // no additional authenticated data
+    aad,
     null, // secret nonce (not used)
     nonce,
     key
@@ -195,7 +197,8 @@ export async function encrypt(
  */
 export async function decrypt(
   ciphertextWithNonce: Uint8Array,
-  key: Uint8Array
+  key: Uint8Array,
+  aad: Uint8Array | null = null
 ): Promise<Uint8Array> {
   const sodium = await getSodium();
 
@@ -214,7 +217,7 @@ export async function decrypt(
     return sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
       null, // secret nonce (not used)
       ciphertext,
-      null, // no additional authenticated data
+      aad,
       nonce,
       key
     );

@@ -85,10 +85,17 @@ npm install -D @types/libsodium-wrappers
 - **Library**: `libsodium-wrappers` using `crypto_aead_xchacha20poly1305_ietf_*`
 - **Nonce Storage**: Prepend 24-byte nonce to ciphertext (standard practice)
   - Encrypted chunk format: `[nonce (24 bytes)][ciphertext][auth tag (16 bytes)]`
+- **Chunk binding** (`enc_v: 2`, current): each chunk is encrypted with
+  `${file_uid}:${chunk_index}` as associated data, so the server cannot
+  reorder chunks or swap them between files undetected. Manifest entries
+  without `enc_v` (legacy) were encrypted with no associated data and are
+  still decrypted that way.
 
 ### Chunk UID Derivation
 
-- Deterministic: `chunk_uid = SHA256(file_uid || chunk_index)`
+- Deterministic: `chunk_uid = BLAKE2b(file_uid || ":" || manifest_key || ":" || chunk_index)`
+- `manifest_key` lives inside the encrypted manifest, so only the client can
+  derive storage paths from a `file_uid`
 - No explicit chunk tracking needed in manifest
 - File UID generated as random UUID on upload start
 
@@ -98,10 +105,14 @@ npm install -D @types/libsodium-wrappers
 
 ### Chunking
 
-- **Chunk Size**: 5 MB
-- Large files split into 5MB chunks before encryption
+- **Chunk Size**: 10 MB
+- Large files split into 10 MB chunks before encryption
 - Each chunk encrypted independently with random nonce
-- **Concurrent uploads**: Up to 3 chunks/files uploading simultaneously
+- **Concurrent uploads**: Up to 3 files, each with up to 3 chunks in flight
+- **Memory**: upload holds only the chunks in flight; download holds at most
+  3 decrypted chunks. File size never affects browser memory on Chromium.
+- **Storage deletes**: the storage API removes at most 1000 objects per call,
+  so chunk deletes are batched (a 20 GB file is 2000 chunks)
 
 ### Folder Upload Support
 
@@ -133,12 +144,18 @@ type VaultManifest = ManifestEntry[];
 ### Resumable Uploads
 
 - **Server-tracked**: Separate `uploads` table tracks in-progress uploads
-- **Resume flow**:
-  1. Server stores: `upload_id`, `vault_uid`, `file_uid`, `total_chunks`, `received_chunks[]`, `created_at`
-  2. On resume, client queries for received chunk indices
-  3. User re-selects original file (plaintext not stored)
-  4. Client encrypts and uploads only missing chunks
-- **UX**: Incomplete files shown in vault with warning icon, click to resume
+  (`upload_id`, `vault_uid`, `file_uid`, `total_chunks`, `received_chunks[]`,
+  `created_at`). `append_received_chunk` is idempotent.
+- **In-session resume** (implemented): a failed upload keeps its chunks and
+  its record; the queue shows a Retry button that uploads only the missing
+  chunks. Dismissing the item (X) or clearing it removes the chunks.
+- **Retries**: 6 retries per chunk with backoff (1 s to 30 s); an upload that
+  already exists in storage counts as success. Transfers pause while the
+  browser is offline and continue when the connection returns.
+- **Stale records**: on unlock with write access, upload records older than
+  24 hours are swept (chunks removed, record deleted).
+- **Cross-session resume** (planned): list incomplete uploads after login,
+  user re-selects the file, client uploads only the missing chunks.
 
 ---
 
@@ -260,8 +277,15 @@ CREATE POLICY "Uploads are accessible by vault_uid header"
 - **Idle timeout**: 15 minutes of inactivity
   - Warning dialog at 13 minutes with "Stay logged in" option
   - Auto-logout at 15 minutes if no interaction
-- **Network drop**: Immediate logout, clear all state
-- **Tab close**: No warning (server-tracked resume handles incomplete uploads)
+  - A running upload or download counts as activity; the idle clock starts
+    when the last transfer ends
+- **Session token**: 1 hour TTL, rotated every 30 minutes; a failed rotation
+  is retried every minute and on reconnect. Transfers fetch the client per
+  request so they survive rotation.
+- **Network drop**: Immediate logout, clear all state, unless a transfer is
+  running, in which case transfers pause and resume when back online
+- **Logout during a transfer**: transfers are aborted before the key is wiped
+- **Tab close**: browser warning while a transfer is running
 
 ### Route Protection
 
@@ -329,28 +353,36 @@ CREATE POLICY "Uploads are accessible by vault_uid header"
 2. For each file (max 3 concurrent):
    a. Client generates `file_uid` (UUID)
    b. Client creates upload record on server (for resume capability)
-   c. Client splits file into 5MB chunks
-   d. For each chunk (with concurrency limit):
-   - Derive `chunk_uid = SHA256(file_uid || index)`
+   c. Client splits file into 10 MB chunks
+   d. For each chunk (3 in flight per file):
+   - Derive `chunk_uid = BLAKE2b(file_uid:manifest_key:index)`
    - Generate random 24-byte nonce
-   - Encrypt chunk with XChaCha20-Poly1305
+   - Encrypt chunk with XChaCha20-Poly1305, associated data `file_uid:index`
    - Prepend nonce to ciphertext
-   - Upload to `{vault_uid}/{chunk_uid}`
+   - Upload to `{vault_uid}/{chunk_uid}` (an existing object counts as done)
    - Update `received_chunks[]` on server
-     e. Update manifest with new file entry
+     e. Update manifest with new file entry (`enc_v: 2`)
      f. Encrypt and save updated manifest
      g. Delete upload record (complete)
 
 ### Download Flow
 
-1. User selects file to download
-2. Client reads file entry from manifest
-3. For each chunk (0 to chunk_count-1):
-   - Derive `chunk_uid = SHA256(file_uid || index)`
-   - Download from `{vault_uid}/{chunk_uid}`
+1. User selects file(s) to download
+2. Pick a sink before anything else (the save dialog needs the click):
+   - Chromium (`showSaveFilePicker`): one save dialog per single file, or
+     one directory picker for several; chunks stream to disk via
+     `createWritable()`. Any file size.
+   - Firefox/Safari: in-memory Blob parts, capped at 1 GiB per GiB of
+     `navigator.deviceMemory` (1 GiB where it is hidden). Larger files are
+     refused with a message pointing to Chrome/Edge. Same approach as MEGA.
+3. Client reads file entry from manifest
+4. For each chunk (3 in flight, written in order):
+   - Derive `chunk_uid = BLAKE2b(file_uid:manifest_key:index)`
+   - Download from `{vault_uid}/{chunk_uid}` with retry
    - Extract nonce (first 24 bytes)
-   - Decrypt chunk
-4. Concatenate chunks, trigger browser download with original filename
+   - Decrypt chunk (associated data `file_uid:index` when `enc_v >= 2`)
+   - Write to the sink
+5. Close the sink (disk file finalized, or Blob handed to the browser)
 
 ### Delete Flow
 
@@ -523,21 +555,23 @@ client/src/
 
 ### Upload Failures
 
-- Retry failed chunks automatically (3 attempts)
-- After all retries fail, show error toast with "Retry" option
-- Upload record preserved for resume
+- Retry failed chunks automatically (6 retries, exponential backoff to 30 s)
+- After all retries fail, show error toast; the queue item offers Retry
+- Chunks and upload record preserved so Retry sends only what is missing
 
 ### Network Errors
 
 - Detect offline via `navigator.onLine` + `online`/`offline` events
-- Immediate logout on network drop
-- Toast notification: "Connection lost. You've been logged out for security."
+- Immediate logout on network drop when no transfer is running
+- With a transfer running: transfers pause, toast "Connection lost.
+  Transfers are paused until it returns.", session is refreshed on reconnect
 
 ### File Validation
 
 - Maximum file name: 255 characters (truncate with warning if longer)
 - Any Unicode characters allowed in names
-- No file size limit (limited by storage quota)
+- No file size limit on upload or Chromium download (limited by storage quota)
+- Firefox/Safari download capped by device memory (see Download Flow)
 
 ---
 

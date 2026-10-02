@@ -3,7 +3,7 @@
  * @description Main vault workspace — header with storage/burn info, file
  * browser, uploads, downloads, and session modals.
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVault } from "../context/VaultContext";
 import { useToast } from "../context/ToastContext";
@@ -15,7 +15,7 @@ import { Button } from "../components/ui/Button";
 import { FileList } from "../components/FileList";
 import { FolderBreadcrumbs } from "../components/FolderBreadcrumbs";
 import { ConfirmModal } from "../components/ConfirmModal";
-import { UploadQueue } from "../components/UploadQueue";
+import { TransferQueue } from "../components/TransferQueue";
 import {
   UploadDropzone,
   type FolderUploadInfo,
@@ -30,8 +30,8 @@ import {
   removeEntries,
   getUniqueName,
 } from "../utils/manifest";
-import { getChunkPath } from "../utils/chunks";
-import { STORAGE_BUCKET } from "../utils/supabase";
+import { getFileChunkPaths } from "../utils/chunks";
+import { removeChunkPaths } from "../utils/transfer";
 import { deleteLogger } from "../utils/logger";
 
 export function Vault() {
@@ -54,11 +54,37 @@ export function Vault() {
     setEditPassword,
   } = useVault();
   const { showToast } = useToast();
-  const { uploadQueue, addToQueue, cancelUpload, clearCompleted, isUploading } =
-    useUpload();
-  const { downloadFile } = useDownload();
-  const { showWarning, remainingSeconds, stayLoggedIn } = useIdleTimeout();
-  useNetworkStatus(); // Auto-logout on network drop
+  const {
+    uploadQueue,
+    addToQueue,
+    cancelUpload,
+    retryUpload,
+    clearCompleted,
+    isUploading,
+  } = useUpload();
+  const {
+    downloads,
+    downloadFiles,
+    cancelDownload,
+    clearCompletedDownloads,
+    isDownloading,
+  } = useDownload();
+  // Running transfers keep the session alive and survive connection drops
+  const transferActive = isUploading || isDownloading;
+  const { showWarning, remainingSeconds, stayLoggedIn } =
+    useIdleTimeout(transferActive);
+  useNetworkStatus(transferActive); // Auto-logout on network drop when idle
+
+  // Warn before the tab closes while a transfer is running
+  useEffect(() => {
+    if (!transferActive) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [transferActive]);
 
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
@@ -148,11 +174,16 @@ export function Vault() {
   }, [newFolderName, manifest, currentFolderId, updateManifest, showToast]);
 
   const handleDownload = useCallback(
-    (file: ManifestEntry) => {
-      downloadFile(file);
+    (files: ManifestEntry[]) => {
+      downloadFiles(files);
     },
-    [downloadFile]
+    [downloadFiles]
   );
+
+  const handleClearCompleted = useCallback(() => {
+    clearCompleted();
+    clearCompletedDownloads();
+  }, [clearCompleted, clearCompletedDownloads]);
 
   const handleDelete = useCallback((entries: ManifestEntry[]) => {
     setDeleteTarget(entries);
@@ -190,19 +221,18 @@ export function Vault() {
         })),
       });
 
-      // Delete blobs from storage
+      // Delete blobs from storage (batched: the API caps one call at 1000)
       const chunkPaths: string[] = [];
       for (const file of removedFiles) {
         if (file.file_uid && file.chunk_count) {
-          for (let i = 0; i < file.chunk_count; i++) {
-            const path = await getChunkPath(
+          chunkPaths.push(
+            ...(await getFileChunkPaths(
               vaultUid,
               file.file_uid,
               manifestKey,
-              i
-            );
-            chunkPaths.push(path);
-          }
+              file.chunk_count
+            ))
+          );
         }
       }
 
@@ -211,18 +241,15 @@ export function Vault() {
           chunkCount: chunkPaths.length,
         });
 
-        const { error: storageError } = await client.storage
-          .from(STORAGE_BUCKET)
-          .remove(chunkPaths);
+        const { failed } = await removeChunkPaths(client, chunkPaths);
 
-        if (storageError) {
-          deleteLogger.error("Storage delete failed:", {
-            message: storageError.message,
-            name: storageError.name,
-          });
-        } else {
-          deleteLogger.log("Storage blobs deleted successfully");
+        // Keep the manifest entry so the chunks stay reachable and a retry
+        // can finish the job; orphaning them would also skew storage_used
+        if (failed > 0) {
+          showToast("Delete failed, please try again", "error");
+          return;
         }
+        deleteLogger.log("Storage blobs deleted successfully");
       }
 
       await updateManifest(newManifest);
@@ -675,11 +702,14 @@ export function Vault() {
         Vault ID: {vaultUid?.slice(0, 6)}
       </footer>
 
-      {/* Upload queue */}
-      <UploadQueue
-        items={uploadQueue}
-        onCancel={cancelUpload}
-        onClearCompleted={clearCompleted}
+      {/* Transfer queue */}
+      <TransferQueue
+        uploads={uploadQueue}
+        downloads={downloads}
+        onCancelUpload={cancelUpload}
+        onRetryUpload={retryUpload}
+        onCancelDownload={cancelDownload}
+        onClearCompleted={handleClearCompleted}
       />
 
       {/* Delete confirmation modal */}

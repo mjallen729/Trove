@@ -13,7 +13,8 @@ interface FileListProps {
   manifest: VaultManifest;
   currentFolderId: string | null;
   onNavigate: (folderId: string | null) => void;
-  onDownload: (file: ManifestEntry) => void;
+  // All selected files in one call so the browser asks for one save location
+  onDownload: (files: ManifestEntry[]) => void;
   onDelete: (entries: ManifestEntry[]) => void;
   readOnly?: boolean;
 }
@@ -110,7 +111,9 @@ export function FileList({
     const selected = entries.filter(
       (e) => selectedIds.has(e.id) && e.type === "file"
     );
-    selected.forEach(onDownload);
+    if (selected.length > 0) {
+      onDownload(selected);
+    }
   }, [entries, selectedIds, onDownload]);
 
   const selectAll = useCallback(() => {

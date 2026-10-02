@@ -5,7 +5,7 @@
  */
 import type { ManifestEntry, VaultManifest } from "../types/types";
 import { generateFileUid } from "./crypto";
-import { MAX_FILE_NAME_LENGTH } from "../types/types";
+import { MAX_FILE_NAME_LENGTH, CHUNK_ENC_VERSION } from "../types/types";
 
 /**
  * Create a new folder entry
@@ -24,7 +24,7 @@ export function createFolder(
 }
 
 /**
- * Create a new file entry
+ * Create a new file entry (chunks written with the current encryption format)
  */
 export function createFileEntry(
   name: string,
@@ -32,7 +32,8 @@ export function createFileEntry(
   fileUid: string,
   size: number,
   chunkCount: number,
-  mimeType: string
+  mimeType: string,
+  encVersion: number = CHUNK_ENC_VERSION
 ): ManifestEntry {
   return {
     id: generateFileUid(),
@@ -43,6 +44,7 @@ export function createFileEntry(
     size,
     chunk_count: chunkCount,
     mime_type: mimeType,
+    enc_v: encVersion,
     created_at: new Date().toISOString(),
   };
 }

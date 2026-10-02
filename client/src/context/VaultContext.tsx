@@ -33,10 +33,12 @@ import {
   hashAuthKey,
 } from "../utils/crypto";
 import { vaultLogger, editLogger } from "../utils/logger";
+import { abortTransfers, resetTransfers } from "../utils/transfer";
 import {
   type VaultManifest,
   type BurnTimerOption,
   FREE_STORAGE_BYTES,
+  SESSION_REFRESH_RETRY_MS,
 } from "../types/types";
 
 // Helper to convert hex string (from Supabase BYTEA) to Uint8Array
@@ -207,9 +209,13 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const encryptionKeyRef = useRef<Uint8Array | null>(null);
   const vaultClientRef = useRef<SupabaseClient | null>(null);
   const sessionTokenRef = useRef<string | null>(null);
+  // Vault UID in a ref so the refresh timer (started before UNLOCK_SUCCESS
+  // dispatches) never reads a stale null from state
+  const vaultUidRef = useRef<string | null>(null);
   const sessionRefreshIntervalRef = useRef<ReturnType<
     typeof setInterval
   > | null>(null);
+  const sessionRefreshingRef = useRef(false);
 
   // Manifest ref for atomic updates (avoids race conditions)
   const manifestRef = useRef<VaultManifest>(state.manifest);
@@ -282,14 +288,16 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
 
   /**
-   * Refresh session by rotating the token in place (keeps write access)
+   * Refresh session by rotating the token in place (keeps write access).
+   * Transfers must call getClient() per request to pick up the new token.
+   * Returns false when the rotation did not happen.
    */
-  const refreshSession = useCallback(async (): Promise<void> => {
-    const vaultUid = state.vaultUid;
+  const refreshSession = useCallback(async (): Promise<boolean> => {
+    const vaultUid = vaultUidRef.current;
     const oldToken = sessionTokenRef.current;
 
     if (!vaultUid || !oldToken) {
-      return;
+      return false;
     }
 
     try {
@@ -306,25 +314,30 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         vaultLogger.error("Failed to refresh session:", error);
-        return;
+        return false;
       }
+
+      // Logged out while the request was in flight
+      if (sessionTokenRef.current !== oldToken) return false;
 
       // Update refs with new token and client
       sessionTokenRef.current = newToken;
       vaultClientRef.current = createVaultClient(vaultUid, newToken);
 
       vaultLogger.log("Session refreshed");
+      return true;
     } catch (err) {
       vaultLogger.error("Session refresh error:", err);
+      return false;
     }
-  }, [state.vaultUid]);
+  }, []);
 
   /**
    * Delete the current session from server
    */
   const deleteSession = useCallback(async (): Promise<void> => {
     const token = sessionTokenRef.current;
-    const vaultUid = state.vaultUid;
+    const vaultUid = vaultUidRef.current;
 
     if (!token || !vaultUid) {
       return;
@@ -345,7 +358,26 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     }
 
     sessionTokenRef.current = null;
-  }, [state.vaultUid]);
+  }, []);
+
+  /**
+   * Refresh now; on failure keep retrying every minute until it succeeds or
+   * the session is gone. A single missed refresh must not expire the session.
+   */
+  const refreshWithRetry = useCallback(async () => {
+    // One retry loop at a time; a concurrent caller just lets it continue
+    if (sessionRefreshingRef.current) return;
+    sessionRefreshingRef.current = true;
+
+    try {
+      while (sessionTokenRef.current) {
+        if (await refreshSession()) return;
+        await new Promise((r) => setTimeout(r, SESSION_REFRESH_RETRY_MS));
+      }
+    } finally {
+      sessionRefreshingRef.current = false;
+    }
+  }, [refreshSession]);
 
   /**
    * Start periodic session refresh (every 30 minutes for 1 hour TTL)
@@ -358,16 +390,17 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
     // Refresh at half the TTL to ensure we never expire
     const refreshInterval = SESSION_TOKEN_TTL_MS / 2;
-    sessionRefreshIntervalRef.current = setInterval(() => {
-      refreshSession();
-    }, refreshInterval);
+    sessionRefreshIntervalRef.current = setInterval(
+      refreshWithRetry,
+      refreshInterval
+    );
 
     vaultLogger.log(
       "Session refresh scheduled every",
       refreshInterval / 60000,
       "minutes"
     );
-  }, [refreshSession]);
+  }, [refreshWithRetry]);
 
   /**
    * Stop periodic session refresh
@@ -377,7 +410,17 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       clearInterval(sessionRefreshIntervalRef.current);
       sessionRefreshIntervalRef.current = null;
     }
+    // A running retry loop exits on its own once the token is cleared
   }, []);
+
+  // A reconnect inside the TTL re-arms the session before paused transfers retry
+  useEffect(() => {
+    const onOnline = () => {
+      if (sessionTokenRef.current) refreshWithRetry();
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [refreshWithRetry]);
 
   const clearError = useCallback(() => {
     dispatch({ type: "CLEAR_ERROR" });
@@ -385,6 +428,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     vaultLogger.log("Logging out...");
+
+    // Stop transfers before the session dies and the key is wiped, so no
+    // worker can run with a zeroed key
+    abortTransfers();
 
     // Stop session refresh
     stopSessionRefresh();
@@ -403,6 +450,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     }
     vaultClientRef.current = null;
     sessionTokenRef.current = null;
+    vaultUidRef.current = null;
     dispatch({ type: "LOGOUT" });
     vaultLogger.log("Logged out, keys wiped, session deleted");
   }, [state.vaultUid, stopSessionRefresh, deleteSession]);
@@ -476,10 +524,12 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         // Store keys and create final client with token
         encryptionKeyRef.current = encryptionKey;
         sessionTokenRef.current = sessionToken;
+        vaultUidRef.current = vaultUid;
         vaultClientRef.current = createVaultClient(vaultUid, sessionToken);
         canWriteRef.current = canWrite;
 
-        // Start session refresh timer
+        // Fresh abort signal for this vault's transfers, then refresh timer
+        resetTransfers();
         startSessionRefresh();
 
         dispatch({
@@ -607,10 +657,12 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         // Store keys and the session client
         encryptionKeyRef.current = encryptionKey;
         sessionTokenRef.current = sessionToken;
+        vaultUidRef.current = vaultUid;
         vaultClientRef.current = client;
         canWriteRef.current = canWrite;
 
-        // Start session refresh timer
+        // Fresh abort signal for this vault's transfers, then refresh timer
+        resetTransfers();
         startSessionRefresh();
 
         dispatch({

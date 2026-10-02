@@ -1,7 +1,7 @@
 /**
  * @module hooks/useIdleTimeout
  * @description Hook that logs the user out after inactivity, surfacing a
- * warning countdown beforehand.
+ * warning countdown beforehand. An active transfer counts as activity.
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useVault } from "../context/VaultContext";
@@ -13,12 +13,16 @@ interface UseIdleTimeoutReturn {
   stayLoggedIn: () => void;
 }
 
-export function useIdleTimeout(): UseIdleTimeoutReturn {
+export function useIdleTimeout(transferActive: boolean): UseIdleTimeoutReturn {
   const { logout, isUnlocked } = useVault();
   const [showWarning, setShowWarning] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const lastActivityRef = useRef(0);
   const timerRef = useRef<number | null>(null);
+  const transferActiveRef = useRef(transferActive);
+  useEffect(() => {
+    transferActiveRef.current = transferActive;
+  }, [transferActive]);
 
   const resetTimer = useCallback(() => {
     lastActivityRef.current = Date.now();
@@ -61,6 +65,12 @@ export function useIdleTimeout(): UseIdleTimeoutReturn {
 
     // Check idle status every second
     timerRef.current = window.setInterval(() => {
+      // A running upload or download keeps the session alive; the idle
+      // clock starts once the last transfer ends
+      if (transferActiveRef.current) {
+        lastActivityRef.current = Date.now();
+      }
+
       const idleTime = Date.now() - lastActivityRef.current;
 
       if (idleTime >= IDLE_TIMEOUT_MS) {

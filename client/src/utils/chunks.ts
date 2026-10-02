@@ -1,7 +1,7 @@
 /**
  * @module utils/chunks
  * @description File chunking utilities — reading, encrypting, and decrypting
- * chunks, storage path derivation, reassembly, and browser download.
+ * chunks, storage path derivation, and handing a Blob to the browser.
  */
 import { CHUNK_SIZE } from "../types/types";
 import { encrypt, decrypt, deriveChunkUid } from "./crypto";
@@ -30,13 +30,22 @@ export async function readChunk(
 }
 
 /**
+ * Associated data binding a chunk to its file and position (enc_v 2).
+ * chunk_count is already authenticated inside the encrypted manifest.
+ */
+export function chunkAad(fileUid: string, chunkIndex: number): Uint8Array {
+  return new TextEncoder().encode(`${fileUid}:${chunkIndex}`);
+}
+
+/**
  * Encrypt a chunk with unique nonce
  */
 export async function encryptChunk(
   chunk: Uint8Array,
-  encryptionKey: Uint8Array
+  encryptionKey: Uint8Array,
+  aad: Uint8Array | null
 ): Promise<Uint8Array> {
-  return encrypt(chunk, encryptionKey);
+  return encrypt(chunk, encryptionKey, aad);
 }
 
 /**
@@ -44,9 +53,10 @@ export async function encryptChunk(
  */
 export async function decryptChunk(
   encryptedChunk: Uint8Array,
-  encryptionKey: Uint8Array
+  encryptionKey: Uint8Array,
+  aad: Uint8Array | null
 ): Promise<Uint8Array> {
-  return decrypt(encryptedChunk, encryptionKey);
+  return decrypt(encryptedChunk, encryptionKey, aad);
 }
 
 /**
@@ -63,33 +73,25 @@ export async function getChunkPath(
 }
 
 /**
- * Concatenate multiple chunks into a single Uint8Array
+ * Get storage paths for every chunk of a file
  */
-export function concatenateChunks(chunks: Uint8Array[]): Uint8Array {
-  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  return result;
+export function getFileChunkPaths(
+  vaultUid: string,
+  fileUid: string,
+  manifestKey: string,
+  chunkCount: number
+): Promise<string[]> {
+  return Promise.all(
+    Array.from({ length: chunkCount }, (_, i) =>
+      getChunkPath(vaultUid, fileUid, manifestKey, i)
+    )
+  );
 }
 
 /**
- * Trigger browser download for decrypted file
+ * Hand a Blob to the browser as a download with the given filename
  */
-export function downloadBlob(
-  data: Uint8Array,
-  filename: string,
-  mimeType: string
-): void {
-  // Create a new ArrayBuffer copy to ensure compatibility with Blob
-  const arrayBuffer = new ArrayBuffer(data.length);
-  new Uint8Array(arrayBuffer).set(data);
-  const blob = new Blob([arrayBuffer], { type: mimeType });
+export function saveBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
 
   const a = document.createElement("a");
@@ -99,8 +101,8 @@ export function downloadBlob(
   a.click();
   document.body.removeChild(a);
 
-  // Clean up after short delay
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // Large blobs take a moment to be picked up by the download manager
+  setTimeout(() => URL.revokeObjectURL(url), 7000);
 }
 
 /**
